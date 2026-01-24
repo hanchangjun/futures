@@ -460,6 +460,31 @@ def compute_signal(
     )
 
 
+def resolve_contract_label(symbol: str) -> str:
+    raw = symbol.strip()
+    upper = raw.upper()
+    lower = raw.lower()
+    if lower == "kq.m@shfe.rb":
+        return "螺纹钢主力合约"
+    if lower == "kq.m@czce.fg":
+        return "玻璃主力合约"
+    if upper == "RB":
+        return "螺纹钢主力合约"
+    if upper == "FG":
+        return "玻璃主力合约"
+    def extract_suffix(code: str, prefix: str) -> Optional[str]:
+        if code.startswith(prefix) and len(code) > len(prefix):
+            suffix = code[len(prefix) :]
+            if suffix.isdigit():
+                return suffix
+        return None
+    for prefix, name in (("RB", "螺纹钢"), ("FG", "玻璃"), ("SHFE.RB", "螺纹钢"), ("CZCE.FG", "玻璃")):
+        suffix = extract_suffix(upper, prefix)
+        if suffix:
+            return f"{name}{suffix}合约"
+    return symbol
+
+
 def format_signal(symbol: str, signal: Signal) -> str:
     risk_value = int(round(signal.risk))
     entry_value = int(round(signal.entry))
@@ -474,8 +499,10 @@ def format_signal(symbol: str, signal: Signal) -> str:
         extra_lines += f"\n支撑：{support_value}"
     if resistance_value is not None:
         extra_lines += f"\n压力：{resistance_value}"
+    contract_label = resolve_contract_label(symbol)
     return (
         f"【{symbol} 波段信号】\n"
+        f"合约：{contract_label}\n"
         f"方向：{signal.direction}\n"
         f"入场：{entry_value}\n"
         f"止损：{stop_value}\n"
@@ -609,6 +636,10 @@ def resolve_tq_symbol(args: argparse.Namespace) -> str:
     if raw_symbol.startswith("RB") and len(raw_symbol) == 6:
         return f"SHFE.rb{raw_symbol[2:]}"
     if raw_symbol.startswith("FG") and len(raw_symbol) == 6:
+        year = raw_symbol[2:4]
+        month = raw_symbol[4:6]
+        if year.isdigit() and month.isdigit():
+            return f"CZCE.FG{year[-1]}{month}"
         return f"CZCE.FG{raw_symbol[2:]}"
     return raw_symbol
 
@@ -620,6 +651,7 @@ def fetch_tq_bars(
     username: Optional[str],
     password: Optional[str],
     timeout: int,
+    wait_update_once: bool,
     debug: bool,
 ) -> List[PriceBar]:
     try:
@@ -634,25 +666,22 @@ def fetch_tq_bars(
     duration = duration_map.get(period, 86400)
     api = None
     try:
+        log_debug(debug, "tqsdk 初始化 TqApi")
         api = TqApi(auth=TqAuth(username, password))
+        log_debug(debug, "tqsdk 请求 K 线序列")
         klines = api.get_kline_serial(symbol, duration_seconds=duration, data_length=count)
-        deadline = time.time() + max(timeout, 1)
-        updated = False
-        supports_timeout = True
-        while time.time() < deadline:
+        if wait_update_once:
+            log_debug(debug, "tqsdk 等待一次行情更新")
             try:
-                if api.wait_update(timeout=1):
-                    updated = True
-                    if len(klines) > 0:
-                        break
+                api.wait_update(timeout=max(timeout, 1))
             except TypeError:
-                supports_timeout = False
                 api.wait_update()
-                updated = True
-                break
-        if (supports_timeout and (not updated or len(klines) == 0)) or (not supports_timeout and len(klines) == 0):
+        else:
+            log_debug(debug, "tqsdk 跳过等待更新，直接读取历史K线")
+        if len(klines) == 0:
             log_debug(debug, "tqsdk 拉取超时或无数据")
             return []
+        log_debug(debug, f"tqsdk K线返回: {len(klines)}")
         bars: List[PriceBar] = []
         for _, row in klines.iterrows():
             open_v = parse_float(str(row.get("open", "")))
@@ -765,6 +794,7 @@ def load_bars(args: argparse.Namespace) -> Tuple[List[PriceBar], Optional[List[P
         symbol = resolve_tq_symbol(args)
         username = args.tq_username or os.getenv("TQ_USERNAME")
         password = args.tq_password or os.getenv("TQ_PASSWORD")
+        log_debug(args.debug, f"tqsdk 准备拉取: {symbol} 周期 {args.period}")
         cache = load_bar_cache(args.cache_file) if args.increment else {}
         primary_key = cache_key(args.source, symbol, args.period)
         cached_primary = bars_from_cache(cache.get(primary_key, []))
@@ -772,6 +802,7 @@ def load_bars(args: argparse.Namespace) -> Tuple[List[PriceBar], Optional[List[P
         fetch_count = (args.increment_count + args.increment_overlap) if cached_primary else args.tq_count
         if len(cached_primary) < required:
             fetch_count = args.tq_count
+        log_debug(args.debug, f"tqsdk 拉取根数: {fetch_count} 缓存根数: {len(cached_primary)}")
         primary_bars = fetch_tq_bars(
             symbol=symbol,
             period=args.period,
@@ -779,6 +810,7 @@ def load_bars(args: argparse.Namespace) -> Tuple[List[PriceBar], Optional[List[P
             username=username,
             password=password,
             timeout=args.tq_timeout,
+            wait_update_once=not args.once,
             debug=args.debug,
         )
         if args.increment:
@@ -792,6 +824,7 @@ def load_bars(args: argparse.Namespace) -> Tuple[List[PriceBar], Optional[List[P
             secondary_fetch = (args.increment_count + args.increment_overlap) if cached_secondary else args.tq_count
             if len(cached_secondary) < required:
                 secondary_fetch = args.tq_count
+            log_debug(args.debug, f"tqsdk 副周期拉取: {args.period_2} 根数 {secondary_fetch} 缓存根数: {len(cached_secondary)}")
             secondary_bars = fetch_tq_bars(
                 symbol=symbol,
                 period=args.period_2,
@@ -799,6 +832,7 @@ def load_bars(args: argparse.Namespace) -> Tuple[List[PriceBar], Optional[List[P
                 username=username,
                 password=password,
                 timeout=args.tq_timeout,
+                wait_update_once=not args.once,
                 debug=args.debug,
             )
             if args.increment:
@@ -851,10 +885,12 @@ def load_bars(args: argparse.Namespace) -> Tuple[List[PriceBar], Optional[List[P
 
 
 def run_once(args: argparse.Namespace) -> Optional[str]:
+    log_debug(args.debug, f"开始执行 once: source={args.source} symbol={args.symbol}")
     primary_bars, secondary_bars, used_symbol = load_bars(args)
     if not primary_bars:
         log_debug(args.debug, "主周期无有效K线")
         return None
+    log_debug(args.debug, f"主周期K线数量: {len(primary_bars)}")
     signal = compute_dual_signal(primary_bars, secondary_bars, args)
     if signal is None or signal.direction == "观望":
         log_debug(args.debug, "无有效信号或处于观望")
