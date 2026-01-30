@@ -1,1 +1,16 @@
-{"symbol": "KQ.m@SHFE.rb", "direction": "¶à", "entry": 3150, "stop": 3086, "take_profit": 3278, "support": 3085, "resistance": 3198, "hands": 1, "risk": 641, "reason": "EMA20/60", "date": "2026-01-26T00:00:00"}
+{
+  "symbol": "KQ.m@SHFE.rb",
+  "direction": "å¤š",
+  "entry": 3159,
+  "stop": 3140,
+  "take_profit": 3198,
+  "support": 3115,
+  "resistance": 3174,
+  "hands": 5,
+  "risk": 974,
+  "reason": "EMA20/60+EMA10/30",
+  "date": "2026-01-30T09:00:00",
+  "strength": "strong",
+  "bar_index": 983186,
+  "last_notify_bar_index": 983186
+}
