@@ -5,7 +5,7 @@ import os
 # Add project root to path
 sys.path.append(os.path.abspath("e:/project/futures/futures"))
 
-from signal.zone import detect_zone, MarketZone, analyze_market
+from signals.zone import detect_zone, MarketZone, analyze_market
 
 def test_zones():
     # Mock data setup

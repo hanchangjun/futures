@@ -1,5 +1,5 @@
 from typing import Tuple, Dict, Any, List
-from signal.indicators import atr
+from signals.indicators import atr
 
 def check_confirm(bars: List[Any], pending: Dict[str, Any], atr_period: int) -> Tuple[bool, float, float, str]:
     """

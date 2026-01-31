@@ -29,6 +29,31 @@ def calculate_macd(bars: List[PriceBar], fast=12, slow=26, signal=9):
         "macd": macd
     })
 
+def calculate_atr(bars: List[PriceBar], period=14):
+    """
+    计算 ATR (Average True Range)
+    """
+    if not bars:
+        return pd.Series()
+    
+    highs = np.array([b.high for b in bars])
+    lows = np.array([b.low for b in bars])
+    closes = np.array([b.close for b in bars])
+    
+    df = pd.DataFrame({'high': highs, 'low': lows, 'close': closes})
+    df['prev_close'] = df['close'].shift(1)
+    
+    # TR = Max(H-L, |H-Cp|, |L-Cp|)
+    df['tr1'] = df['high'] - df['low']
+    df['tr2'] = (df['high'] - df['prev_close']).abs()
+    df['tr3'] = (df['low'] - df['prev_close']).abs()
+    df['tr'] = df[['tr1', 'tr2', 'tr3']].max(axis=1)
+    
+    # ATR = SMA(TR, period)
+    # 也可以用 RMA (Wilder's Smoothing) 但这里先用 SMA
+    atr = df['tr'].rolling(window=period).mean()
+    return atr
+
 def compute_bi_macd(bi_list, bars, macd_df):
     """
     计算每一笔的 MACD 动力学指标

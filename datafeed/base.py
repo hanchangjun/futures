@@ -132,6 +132,9 @@ def get_bars(
         from .file_feed import get_bars_file
 
         return get_bars_file(symbol=symbol, period=period, count=count, **kwargs)
+    if source_norm == "db":
+        from .db_feed import get_bars_db
+        return get_bars_db(symbol=symbol, period=period, count=count, **kwargs)
     if source_norm == "tq":
         from .tq_feed import get_bars_tq
 

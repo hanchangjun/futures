@@ -10,7 +10,7 @@ sys.path.insert(0, os.path.abspath(os.path.dirname(__file__) + "/.."))
 
 from main import ema, atr
 from datafeed import get_bars
-from signal.zone import detect_zone, MarketZone
+from signals.zone import detect_zone, MarketZone
 
 def run_attribution_analysis(args):
     # Fetch Data

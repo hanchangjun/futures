@@ -1,0 +1,994 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ChanQuant Pro | 缠论量化交易系统</title>
+    <script src="/static/echarts.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            /* Color Palette - Dark Pro Theme */
+            --bg-body: #121212;
+            --bg-card: #1e1e1e;
+            --bg-hover: #2d2d2d;
+            --bg-input: #2c2c2c;
+            --border-color: #333;
+            
+            --text-primary: #e0e0e0;
+            --text-secondary: #a0a0a0;
+            --text-muted: #666;
+
+            --primary: #2962ff;
+            --primary-hover: #1e4bd8;
+            --success: #00e676;
+            --success-dark: #00b248;
+            --danger: #ff1744;
+            --danger-dark: #d50000;
+            --warning: #ffc107;
+            --info: #00b0ff;
+
+            --font-main: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            --font-mono: 'JetBrains Mono', 'Courier New', Courier, monospace;
+
+            --sidebar-width: 240px;
+            --header-height: 60px;
+            --radius: 8px;
+            --shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            font-family: var(--font-main);
+            background: var(--bg-body);
+            color: var(--text-primary);
+            margin: 0;
+            height: 100vh;
+            overflow: hidden;
+            display: flex;
+        }
+
+        /* --- Layout --- */
+        .app-sidebar {
+            width: var(--sidebar-width);
+            background: var(--bg-card);
+            border-right: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            padding: 20px 0;
+            z-index: 10;
+        }
+
+        .app-main {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            background: var(--bg-body);
+        }
+
+        .app-header {
+            height: var(--header-height);
+            background: var(--bg-card);
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 24px;
+        }
+
+        .app-content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+        }
+
+        /* --- Sidebar --- */
+        .logo {
+            padding: 0 24px 20px;
+            font-size: 20px;
+            font-weight: 700;
+            color: var(--primary);
+            letter-spacing: -0.5px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .logo span { color: var(--text-primary); }
+
+        .nav-menu {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        .nav-item {
+            padding: 12px 24px;
+            cursor: pointer;
+            color: var(--text-secondary);
+            font-weight: 500;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            border-left: 3px solid transparent;
+        }
+
+        .nav-item:hover {
+            background: var(--bg-hover);
+            color: var(--text-primary);
+        }
+
+        .nav-item.active {
+            background: rgba(41, 98, 255, 0.1);
+            color: var(--primary);
+            border-left-color: var(--primary);
+        }
+
+        .status-box {
+            margin-top: auto;
+            padding: 20px 24px;
+            font-size: 12px;
+            color: var(--text-muted);
+            border-top: 1px solid var(--border-color);
+        }
+
+        /* --- UI Components --- */
+        .card {
+            background: var(--bg-card);
+            border-radius: var(--radius);
+            padding: 20px;
+            box-shadow: var(--shadow);
+            margin-bottom: 20px;
+            border: 1px solid var(--border-color);
+        }
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+        }
+        .card-title {
+            margin: 0;
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .control-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            align-items: center;
+        }
+
+        input, select {
+            background: var(--bg-input);
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+            padding: 8px 12px;
+            border-radius: 4px;
+            font-family: var(--font-main);
+            font-size: 14px;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+        input:focus, select:focus { border-color: var(--primary); }
+
+        button {
+            background: var(--bg-hover);
+            color: var(--text-primary);
+            border: 1px solid var(--border-color);
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: all 0.2s;
+            font-family: var(--font-main);
+            font-size: 14px;
+        }
+        button:hover { background: #3d3d3d; border-color: #555; }
+        
+        button.primary { background: var(--primary); color: white; border: none; }
+        button.primary:hover { background: var(--primary-hover); }
+        
+        button.success { background: var(--success-dark); color: white; border: none; }
+        button.success:hover { background: var(--success); }
+        
+        button.danger { background: var(--danger-dark); color: white; border: none; }
+        button.danger:hover { background: var(--danger); }
+
+        /* --- Signal Chips --- */
+        .signal-group {
+            display: inline-flex;
+            background: var(--bg-input);
+            padding: 4px;
+            border-radius: 6px;
+            border: 1px solid var(--border-color);
+        }
+        .signal-label {
+            font-size: 12px; 
+            color: var(--text-muted); 
+            margin-right: 8px; 
+            align-self: center;
+            padding-left: 8px;
+        }
+        .signal-toggle {
+            padding: 4px 10px;
+            font-size: 12px;
+            cursor: pointer;
+            border-radius: 4px;
+            color: var(--text-secondary);
+            transition: all 0.2s;
+            user-select: none;
+            font-weight: 600;
+        }
+        .signal-toggle:hover { color: var(--text-primary); background: rgba(255,255,255,0.05); }
+        .signal-toggle.active { color: white; }
+        
+        .signal-toggle.active[data-type*='B'] { background: var(--success-dark); }
+        .signal-toggle.active[data-type*='S'] { background: var(--danger-dark); }
+
+        /* --- Tables --- */
+        table { width: 100%; border-collapse: collapse; font-size: 14px; }
+        th { text-align: left; padding: 12px; color: var(--text-secondary); border-bottom: 1px solid var(--border-color); font-weight: 500; }
+        td { padding: 12px; border-bottom: 1px solid var(--bg-body); color: var(--text-primary); }
+        tr:hover td { background: var(--bg-hover); }
+        
+        /* --- Terminal Log --- */
+        .log-box {
+            background: #000;
+            color: #00e676;
+            font-family: var(--font-mono);
+            font-size: 12px;
+            padding: 16px;
+            border-radius: var(--radius);
+            height: 200px;
+            overflow-y: auto;
+            border: 1px solid var(--border-color);
+            line-height: 1.5;
+        }
+        .log-box::-webkit-scrollbar { width: 8px; }
+        .log-box::-webkit-scrollbar-thumb { background: #333; border-radius: 4px; }
+
+        /* --- Chart Area --- */
+        #chart { width: 100%; height: 600px; border-radius: var(--radius); overflow: hidden; }
+
+        /* --- Badges --- */
+        .badge { padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; color: white; }
+        .badge-1B { background: var(--success); color: black; }
+        .badge-2B { background: var(--success-dark); }
+        .badge-3B { background: #00b0ff; }
+        .badge-1S { background: var(--danger); color: white; }
+        .badge-2S { background: var(--danger-dark); }
+        .badge-3S { background: var(--warning); color: black; }
+
+        /* --- Helper Classes --- */
+        .tab-content { display: none; animation: fadeIn 0.3s ease; }
+        .tab-content.active { display: block; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+
+        .flex-spacer { margin-left: auto; }
+        .text-small { font-size: 12px; }
+        .text-muted { color: var(--text-muted); }
+    </style>
+</head>
+<body>
+    
+    <!-- Sidebar -->
+    <aside class="app-sidebar">
+        <div class="logo">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+            </svg>
+            <span>ChanQuant</span>
+        </div>
+
+        <ul class="nav-menu">
+            <li class="nav-item active" onclick="switchTab('dashboard')">
+                <span>仪表盘 Dashboard</span>
+            </li>
+            <li class="nav-item" onclick="switchTab('backtest')">
+                <span>回测系统 Backtest</span>
+            </li>
+            <li class="nav-item" onclick="switchTab('docs')">
+                <span>文档 Docs</span>
+            </li>
+        </ul>
+
+        <div class="status-box">
+            <div id="status">System Ready</div>
+            <div style="margin-top: 5px; opacity: 0.7;">v2.0.0 Pro</div>
+        </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="app-main">
+        <header class="app-header">
+            <h3 style="margin:0; font-weight:500;">交易工作台</h3>
+            <div class="control-row">
+                 <div class="signal-group" style="border:none; background:transparent;">
+                    <input type="checkbox" id="autoUpdate" onchange="toggleAutoUpdate()" style="margin-right: 6px;">
+                    <label for="autoUpdate" class="text-small" style="cursor: pointer; color: var(--text-secondary);">自动更新 (60s)</label>
+                </div>
+                <div style="border-left: 1px solid var(--border-color); height: 20px; margin: 0 10px;"></div>
+                <input type="text" id="tqUser" placeholder="TQ账号" style="width: 100px; background: transparent;">
+                <input type="password" id="tqPass" placeholder="TQ密码" style="width: 100px; background: transparent;">
+            </div>
+        </header>
+
+        <div class="app-content">
+            
+            <!-- Dashboard Tab -->
+            <div id="dashboard" class="tab-content active">
+                
+                <!-- Chart Controls -->
+                <div class="card">
+                    <div class="control-row">
+                        <!-- Symbol & Period -->
+                        <div style="display:flex; gap:10px; align-items:center;">
+                            <input type="text" id="symbol" value="KQ.m@SHFE.rb" placeholder="合约代码" list="symbolList" style="width: 140px; font-weight:600;">
+                            <datalist id="symbolList">
+                                <option value="KQ.m@SHFE.rb">螺纹钢 (RB)</option>
+                                <option value="KQ.m@CZCE.FG">玻璃 (FG)</option>
+                                <option value="KQ.m@CZCE.SA">纯碱 (SA)</option>
+                                <option value="KQ.m@DCE.v">PVC (v)</option>
+                            </datalist>
+                            <select id="period" style="font-weight:600;">
+                                <option value="1m">1分钟</option>
+                                <option value="5m">5分钟</option>
+                                <option value="30m" selected>30分钟</option>
+                                <option value="1d">日线</option>
+                            </select>
+                            <select id="strategy" style="font-weight:600; width: 120px;">
+                                <option value="standard" selected>标准策略</option>
+                                <option value="pure_chan">纯缠论</option>
+                            </select>
+                            <button class="primary" onclick="loadChart()">加载图表</button>
+                        </div>
+
+                        <div style="border-left: 1px solid var(--border-color); height: 24px;"></div>
+
+                        <!-- Actions -->
+                        <button onclick="runImport()">导入数据</button>
+                        <button onclick="exportData()">导出CSV</button>
+                        <button onclick="runSimpleBacktest()">Swing回测</button>
+                        
+                        <div class="flex-spacer"></div>
+
+                        <!-- Signal Toggles -->
+                        <div class="signal-group" id="signal-toggles">
+                            <span class="signal-label">显示信号:</span>
+                            <span class="signal-toggle active" data-type="1B" onclick="toggleSignal(this)">1B</span>
+                            <span class="signal-toggle active" data-type="2B" onclick="toggleSignal(this)">2B</span>
+                            <span class="signal-toggle active" data-type="3B" onclick="toggleSignal(this)">3B</span>
+                            <span style="width: 1px; background: var(--border-color); height: 12px; margin: 0 6px; display:inline-block; vertical-align:middle;"></span>
+                            <span class="signal-toggle active" data-type="1S" onclick="toggleSignal(this)">1S</span>
+                            <span class="signal-toggle active" data-type="2S" onclick="toggleSignal(this)">2S</span>
+                            <span class="signal-toggle active" data-type="3S" onclick="toggleSignal(this)">3S</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Main Chart -->
+                <div class="card" style="padding: 0; border: none; background: transparent;">
+                    <div id="chart"></div>
+                </div>
+
+                <div class="row" style="display: flex; gap: 20px;">
+                    <!-- Latest Signals -->
+                    <div class="card" style="flex: 2; display: flex; flex-direction: column; min-height: 300px;">
+                        <div class="card-header">
+                            <h4 class="card-title">最新信号监控</h4>
+                            <div class="control-row text-small">
+                                <select id="sig_symbol" onchange="loadSignals(1)" style="padding: 4px 8px;">
+                                    <option value="">所有合约</option>
+                                    <option value="KQ.m@SHFE.rb">螺纹钢</option>
+                                    <option value="KQ.m@CZCE.FG">玻璃</option>
+                                    <option value="KQ.m@CZCE.SA">纯碱</option>
+                                    <option value="KQ.m@DCE.v">PVC</option>
+                                </select>
+                                <select id="sig_period" onchange="loadSignals(1)" style="padding: 4px 8px;">
+                                    <option value="">所有级别</option>
+                                    <option value="1d">1d</option>
+                                    <option value="30m">30m</option>
+                                    <option value="5m">5m</option>
+                                </select>
+                                <select id="sig_type" onchange="loadSignals(1)" multiple size="1" style="height: 28px; vertical-align: middle; width: 80px; display:none;"> 
+                                    <!-- Hidden multi-select for simplicity in new UI, defaulting to all or use API logic -->
+                                </select>
+                                <button onclick="loadSignals(1)" style="padding: 4px 10px;">刷新</button>
+                            </div>
+                        </div>
+                        <div style="flex: 1; overflow-y: auto;">
+                            <table id="signalTable">
+                                <thead>
+                                    <tr>
+                                        <th>时间</th>
+                                        <th>合约</th>
+                                        <th>级别</th>
+                                        <th>类型</th>
+                                        <th>价格</th>
+                                        <th>止损/仓位</th>
+                                        <th>描述</th>
+                                    </tr>
+                                </thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
+                        <div style="margin-top: 10px; display: flex; justify-content: center; gap: 10px;">
+                             <button onclick="changeSignalPage(-1)" class="small">上一页</button>
+                             <span id="pageInfo" style="align-self: center; font-size: 12px; color: var(--text-secondary);">Page 1</span>
+                             <button onclick="changeSignalPage(1)" class="small">下一页</button>
+                        </div>
+                    </div>
+
+                    <!-- System Log -->
+                    <div class="card" style="flex: 1; display: flex; flex-direction: column; min-height: 300px;">
+                        <div class="card-header">
+                            <h4 class="card-title">系统日志</h4>
+                        </div>
+                        <div id="logBox" class="log-box" style="flex: 1; height: auto;">
+                            <div>[System] ChanQuant Pro Initialized...</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Backtest Tab -->
+            <div id="backtest" class="tab-content">
+                <div class="card">
+                    <div class="card-header">
+                        <h4 class="card-title">事件驱动回测配置</h4>
+                    </div>
+                    <div class="control-row">
+                        <div style="display:flex; flex-direction:column; gap:5px;">
+                            <label class="text-small text-muted">合约</label>
+                            <input type="text" id="bt_symbol" value="KQ.m@SHFE.rb" list="symbolList">
+                        </div>
+                        <div style="display:flex; flex-direction:column; gap:5px;">
+                            <label class="text-small text-muted">交易周期</label>
+                            <select id="bt_period">
+                                <option value="30m">30分钟</option>
+                                <option value="5m">5分钟</option>
+                                <option value="1d">日线</option>
+                            </select>
+                        </div>
+                        <div style="display:flex; flex-direction:column; gap:5px;">
+                            <label class="text-small text-muted">回测天数</label>
+                            <input type="number" id="bt_days" value="30" style="width: 80px;">
+                        </div>
+                        <div style="display:flex; flex-direction:column; gap:5px;">
+                            <label class="text-small text-muted">趋势过滤周期</label>
+                            <select id="bt_filter">
+                                <option value="">无</option>
+                                <option value="1d" selected>1天 (1d)</option>
+                                <option value="4h">4小时 (4h)</option>
+                            </select>
+                        </div>
+                        <div style="display:flex; flex-direction:column; gap:5px;">
+                            <label class="text-small text-muted">策略选择</label>
+                            <select id="bt_strategy">
+                                <option value="standard" selected>标准策略</option>
+                                <option value="pure_chan">纯缠论</option>
+                            </select>
+                        </div>
+                        <div style="display:flex; flex-direction:column; gap:5px; justify-content:flex-end;">
+                            <button class="primary" onclick="runEventBacktest()" style="height: 38px;">开始回测</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <h4 class="card-title">回测运行结果</h4>
+                    </div>
+                    <div id="bt_result" style="background: var(--bg-input); padding: 15px; border-radius: 4px; font-family: var(--font-mono); white-space: pre-wrap; color: var(--text-secondary);">等待运行...</div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <h4 class="card-title">历史回测记录 (Database)</h4>
+                        <button onclick="loadBacktestHistory()">刷新列表</button>
+                    </div>
+                    <div style="overflow-x: auto;">
+                        <table id="btHistoryTable">
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>时间</th>
+                                    <th>合约</th>
+                                    <th>周期</th>
+                                    <th>收益率</th>
+                                    <th>盈亏</th>
+                                    <th>交易数</th>
+                                    <th>操作</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Docs Tab -->
+            <div id="docs" class="tab-content">
+                <div class="card">
+                    <div class="card-header">
+                        <h4 class="card-title">策略文档</h4>
+                    </div>
+                    <div id="docContent" style="padding: 20px; line-height: 1.6; color: var(--text-primary);">Loading...</div>
+                </div>
+            </div>
+
+        </div>
+    </main>
+
+    <script>
+        // --- Global State ---
+        let currentSignalPage = 1;
+        const signalLimit = 20;
+        let chartInstance = null;
+        let backtestHistoryCache = {};
+
+        // --- Initialization ---
+        window.onload = function() {
+            // Init ECharts with Dark Theme
+            chartInstance = echarts.init(document.getElementById('chart'), 'dark', {
+                renderer: 'canvas',
+                useDirtyRect: false
+            });
+            // Overwrite background to match transparent/card
+            chartInstance.setOption({ backgroundColor: 'transparent' });
+
+            window.addEventListener('resize', () => chartInstance.resize());
+            
+            loadSignals(1);
+            loadDocs();
+            loadBacktestHistory();
+            loadChart(); // Auto load chart on start
+        };
+
+        // --- Tabs ---
+        function switchTab(tabId) {
+            document.querySelectorAll('.nav-item').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+            
+            // Find nav item by text content roughly or index, here using onclick match for simplicity
+            const navItem = Array.from(document.querySelectorAll('.nav-item')).find(el => el.getAttribute('onclick').includes(tabId));
+            if(navItem) navItem.classList.add('active');
+
+            document.getElementById(tabId).classList.add('active');
+            
+            if (tabId === 'dashboard') {
+                setTimeout(() => chartInstance.resize(), 100);
+            }
+        }
+
+        // --- Logger ---
+        function log(msg) {
+            const box = document.getElementById('logBox');
+            const time = new Date().toLocaleTimeString();
+            box.innerHTML += `<div style="margin-bottom:4px;"><span style="color:var(--text-muted)">[${time}]</span> ${msg}</div>`;
+            box.scrollTop = box.scrollHeight;
+        }
+
+        // --- Signal Toggles ---
+        function toggleSignal(el) {
+            el.classList.toggle('active');
+            loadChart();
+        }
+
+        // --- Main Chart Logic ---
+        async function loadChart() {
+            const symbol = document.getElementById('symbol').value;
+            const period = document.getElementById('period').value;
+            const strategy = document.getElementById('strategy').value;
+            
+            log(`Loading chart for ${symbol} (${period}) using ${strategy}...`);
+            
+            // Ensure container exists
+            const chartDom = document.getElementById('chart');
+            if (!chartDom) {
+                console.error("Chart DOM not found");
+                return;
+            }
+
+            // Show loading on existing instance if possible, or just log
+            if (chartInstance) {
+                try {
+                    chartInstance.showLoading({ color: '#2962ff', maskColor: 'rgba(30, 30, 30, 0.6)' });
+                } catch(e) { 
+                    // Ignore if instance is bad
+                }
+            }
+            
+            try {
+                // 1. Get Bars
+                const barsRes = await fetch(`/api/bars/${symbol}/${period}?limit=1000`);
+                const barsData = await barsRes.json();
+                
+                if (!barsData || !Array.isArray(barsData) || barsData.length === 0) {
+                    log('No data found. Please import data first.');
+                    if (chartInstance) chartInstance.hideLoading();
+                    return;
+                }
+
+                // 2. Get Analysis
+                const analysisRes = await fetch(`/api/analysis/${symbol}/${period}?limit=1000&strategy_name=${strategy}`);
+                const analysisData = await analysisRes.json();
+                
+                if (analysisData.error) {
+                    log(`Analysis Error: ${analysisData.error}`);
+                }
+
+                const centers = analysisData.centers || [];
+                const bi_list = analysisData.bi_list || [];
+                const seg_list = analysisData.seg_list || [];
+
+                // Data Processing
+                const dates = barsData.map(item => item.dt);
+                const kData = barsData.map(item => [item.open, item.close, item.low, item.high]);
+                
+                // Validate Data
+                if (dates.some(d => d === undefined || d === null)) {
+                    console.error("Found undefined dates");
+                }
+                
+                // Indicators
+                function calcEMA(data, n) {
+                    let ema = [data[0]];
+                    let k = 2 / (n + 1);
+                    for (let i = 1; i < data.length; i++) {
+                        ema.push(data[i] * k + ema[i-1] * (1 - k));
+                    }
+                    return ema;
+                }
+                const closes = barsData.map(i => i.close);
+                const ema12 = calcEMA(closes, 12);
+                const ema26 = calcEMA(closes, 26);
+                const diff = ema12.map((v, i) => v - ema26[i]);
+                const dea = calcEMA(diff, 9);
+                const macd = diff.map((v, i) => (v - dea[i]) * 2);
+
+                // Prepare MarkAreas (ZhongShu)
+                const markAreas = [];
+                if (Array.isArray(centers)) {
+                    centers.forEach(c => {
+                        if (c && c.start_dt && c.end_dt && c.zg !== undefined && c.zd !== undefined) {
+                            markAreas.push([
+                                {
+                                    xAxis: c.start_dt,
+                                    yAxis: c.zg,
+                                    itemStyle: { color: 'rgba(255, 193, 7, 0.1)', borderWidth: 1, borderColor: '#ffc107', borderType: 'dashed' }
+                                },
+                                {
+                                    xAxis: c.end_dt,
+                                    yAxis: c.zd
+                                }
+                            ]);
+                        }
+                    });
+                }
+
+                // Construct Option
+                const option = {
+                    backgroundColor: 'transparent',
+                    animation: false,
+                    title: { text: `${symbol} - ${period}`, textStyle: { color: '#e0e0e0' } },
+                    tooltip: { 
+                        trigger: 'axis', 
+                        axisPointer: { type: 'cross' },
+                        backgroundColor: 'rgba(30,30,30,0.9)',
+                        borderColor: '#333',
+                        textStyle: { color: '#e0e0e0' }
+                    },
+                    legend: { data: ['K-Line', 'MACD', 'Bi', 'Seg'], textStyle: { color: '#a0a0a0' } },
+                    grid: [
+                        { left: '3%', right: '3%', top: '10%', height: '60%' },
+                        { left: '3%', right: '3%', top: '75%', height: '20%' }
+                    ],
+                    xAxis: [
+                        { type: 'category', data: dates, scale: true, boundaryGap: false, axisLine: { lineStyle: { color: '#333' } }, gridIndex: 0 },
+                        { type: 'category', gridIndex: 1, data: dates, show: false }
+                    ],
+                    yAxis: [
+                        { type: 'value', scale: true, splitLine: { lineStyle: { color: '#333' } }, gridIndex: 0 },
+                        { type: 'value', scale: true, gridIndex: 1, splitNumber: 2, splitLine: { lineStyle: { color: '#333' } } }
+                    ],
+                    dataZoom: [
+                        { type: 'inside', xAxisIndex: [0, 1], start: 80, end: 100 },
+                        { show: true, xAxisIndex: [0, 1], type: 'slider', top: '96%', start: 80, end: 100, borderColor: '#333', fillerColor: 'rgba(41, 98, 255, 0.2)' }
+                    ],
+                    series: [
+                        {
+                            name: 'K-Line',
+                            type: 'candlestick',
+                            data: kData,
+                            xAxisIndex: 0,
+                            yAxisIndex: 0,
+                            itemStyle: {
+                                color: '#ff1744',
+                                color0: '#00e676',
+                                borderColor: '#ff1744',
+                                borderColor0: '#00e676'
+                            },
+                            markArea: {
+                                data: markAreas,
+                                label: { show: true, position: 'top', color: '#ffc107', formatter: 'ZS' }
+                            }
+                        },
+                        {
+                            name: 'MACD',
+                            type: 'bar',
+                            xAxisIndex: 1,
+                            yAxisIndex: 1,
+                            data: macd,
+                            itemStyle: {
+                                color: (params) => params.value > 0 ? '#ff1744' : '#00e676'
+                            }
+                        },
+                        {
+                            name: 'Bi',
+                            type: 'line',
+                            data: [], 
+                            xAxisIndex: 0,
+                            yAxisIndex: 0,
+                            showSymbol: false,
+                            lineStyle: { color: '#00b0ff', width: 1, type: 'dashed' }
+                        }
+                    ]
+                };
+
+                // RE-INIT CHART to avoid internal state errors
+                if (chartInstance) {
+                    chartInstance.dispose();
+                }
+                chartInstance = echarts.init(chartDom, 'dark', {
+                    renderer: 'canvas',
+                    useDirtyRect: false
+                });
+                // Background override
+                chartInstance.setOption({ backgroundColor: 'transparent' });
+
+                console.log('Setting Option:', option);
+                chartInstance.setOption(option);
+                chartInstance.hideLoading();
+
+            } catch (e) {
+                console.error("LoadChart Error:", e);
+                log('Error loading chart: ' + e.message);
+                if (chartInstance) chartInstance.hideLoading();
+            }
+        }
+
+        // --- Other Functions (Signals, Import, Export, Backtest) ---
+        // Kept mostly same logic but ensure ID references match new HTML
+
+        async function loadSignals(page) {
+            currentSignalPage = page;
+            const symbolFilter = document.getElementById('sig_symbol').value;
+            const periodFilter = document.getElementById('sig_period').value;
+            // Type filter support (multi-select hidden but logic preserved)
+            // const typeSelect = document.getElementById('sig_type');
+            
+            let url = `/api/signals?page=${page}&limit=${signalLimit}`;
+            if (symbolFilter) url += `&symbol=${symbolFilter}`;
+            if (periodFilter) url += `&period=${periodFilter}`;
+            
+            try {
+                const res = await fetch(url);
+                const data = await res.json();
+                
+                const tbody = document.querySelector('#signalTable tbody');
+                tbody.innerHTML = '';
+                
+                data.data.forEach(s => {
+                    // Position Management Info
+                    let posInfo = "";
+                    let slInfo = "";
+                    if (s.pos) {
+                        posInfo = `<div class="badge" style="background: #666; font-size: 10px; margin-top: 2px;">Pos: ${(s.pos.ratio * 100).toFixed(0)}%</div>`;
+                    }
+                    if (s.sl) {
+                        slInfo = `<div style="font-size: 11px; color: #ff1744;">SL: ${s.sl.toFixed(1)}</div>`;
+                    }
+
+                    const row = `<tr>
+                        <td style="color:var(--text-secondary)">${s.dt}</td>
+                        <td style="font-weight:500">${s.symbol}</td>
+                        <td>${s.period}</td>
+                        <td><span class="badge badge-${s.signal_type}">${s.signal_type}</span></td>
+                        <td style="font-family:var(--font-mono)">${s.price.toFixed(2)}</td>
+                        <td>${slInfo}${posInfo}</td>
+                        <td class="text-muted text-small">${s.description || '-'}</td>
+                    </tr>`;
+                    tbody.innerHTML += row;
+                });
+                
+                document.getElementById('pageInfo').innerText = `Page ${data.page} / ${Math.ceil(data.total / data.limit)}`;
+            } catch (e) {
+                log('Error loading signals: ' + e.message);
+            }
+        }
+
+        function changeSignalPage(delta) {
+            const newPage = currentSignalPage + delta;
+            if (newPage < 1) return;
+            loadSignals(newPage);
+        }
+
+        function toggleAutoUpdate() {
+            const cb = document.getElementById('autoUpdate');
+            if (cb.checked) {
+                log('Auto update enabled (60s)');
+                window.autoTimer = setInterval(() => {
+                    loadChart();
+                    loadSignals(1);
+                }, 60000);
+            } else {
+                log('Auto update disabled');
+                clearInterval(window.autoTimer);
+            }
+        }
+
+        async function runImport() {
+            const symbol = document.getElementById('symbol').value;
+            const period = document.getElementById('period').value;
+            const tqUser = document.getElementById('tqUser').value;
+            const tqPass = document.getElementById('tqPass').value;
+            
+            const days = prompt(`请输入导入天数 (默认 365 天):`, "365");
+            if (days === null) return;
+
+            log(`Starting Import for ${symbol} (${period})...`);
+            
+            try {
+                const res = await fetch('/api/action/import', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        symbol: symbol, 
+                        period: period,
+                        days: parseInt(days) || 365,
+                        tq_user: tqUser,
+                        tq_pass: tqPass
+                    })
+                });
+                const data = await res.json();
+                log(`Import: ${data.message}`);
+                alert(data.message);
+            } catch (e) {
+                log('Import Error: ' + e);
+            }
+        }
+
+        function exportData() {
+            const symbol = document.getElementById('symbol').value;
+            const period = document.getElementById('period').value;
+            const days = 365;
+            if (!confirm(`确认导出 ${symbol} (${period}) 过去 ${days} 天的数据为CSV?`)) return;
+            log(`Starting export for ${symbol}...`);
+            window.open(`/api/export/bars/${symbol}/${period}?days=${days}`, '_blank');
+        }
+
+        async function runSimpleBacktest() {
+            const symbol = document.getElementById('symbol').value;
+            const period = document.getElementById('period').value;
+            log(`Starting Swing Backtest for ${symbol}...`);
+            try {
+                const res = await fetch('/api/action/simple_backtest', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        symbol: symbol, 
+                        period: period,
+                        days: 365
+                    })
+                });
+                const data = await res.json();
+                if (data.status === 'success') {
+                    const m = data.result.metrics;
+                    const msg = `Return: ${(m.cum_return*100).toFixed(2)}%, WinRate: ${(m.win_rate*100).toFixed(2)}%, MaxDD: ${(m.max_drawdown*100).toFixed(2)}%`;
+                    log('Backtest Done: ' + msg);
+                    alert(`回测完成！\n${msg}`);
+                } else {
+                    log(`Backtest Failed: ${data.message}`);
+                }
+            } catch (e) {
+                log('Backtest Error: ' + e);
+            }
+        }
+
+        // --- Event Backtest & Docs (Preserved Logic) ---
+        async function runEventBacktest() {
+            const symbol = document.getElementById('bt_symbol').value;
+            const period = document.getElementById('bt_period').value;
+            const days = document.getElementById('bt_days').value;
+            const filter = document.getElementById('bt_filter').value;
+            const strategy = document.getElementById('bt_strategy').value;
+            
+            document.getElementById('bt_result').innerText = `Running backtest (${strategy})... please wait.`;
+            
+            try {
+                const res = await fetch('/api/action/backtest', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        symbol: symbol, 
+                        period: period, 
+                        days: parseInt(days), 
+                        filter_period: filter,
+                        strategy_name: strategy
+                    })
+                });
+                const data = await res.json();
+                document.getElementById('bt_result').innerText = JSON.stringify(data, null, 2);
+                loadBacktestHistory();
+            } catch (e) {
+                document.getElementById('bt_result').innerText = "Error: " + e;
+            }
+        }
+
+        async function loadBacktestHistory() {
+            try {
+                const res = await fetch('/api/backtests');
+                if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+                const data = await res.json();
+                
+                if (!Array.isArray(data)) {
+                    console.error("Backtest history data is not an array:", data);
+                    return;
+                }
+
+                const tbody = document.querySelector('#btHistoryTable tbody');
+                tbody.innerHTML = '';
+                
+                // Clear old cache
+                backtestHistoryCache = {};
+
+                data.forEach(item => {
+                    // Store in cache
+                    backtestHistoryCache[item.id] = item;
+
+                    const row = `<tr>
+                        <td>${item.id}</td>
+                        <td>${new Date(item.created_at).toLocaleString()}</td>
+                        <td>${item.symbol}</td>
+                        <td>${item.period}</td>
+                        <td style="color:${item.roi >= 0 ? 'var(--success)' : 'var(--danger)'}">
+                            ${(item.roi * 100).toFixed(2)}%
+                        </td>
+                        <td>${item.pnl.toFixed(2)}</td>
+                        <td>${item.total_trades}</td>
+                        <td><button class="small" onclick="showBacktestDetails('${item.id}')">详情</button></td>
+                    </tr>`;
+                    tbody.innerHTML += row;
+                });
+            } catch (e) {
+                console.error("Load history error:", e);
+            }
+        }
+
+        function showBacktestDetails(id) {
+            const item = backtestHistoryCache[id];
+            if (!item) return;
+            document.getElementById('bt_result').innerText = JSON.stringify(item, null, 2);
+            switchTab('backtest'); // Ensure we are on the tab
+        }
+
+        async function loadDocs() {
+            try {
+                const res = await fetch('/api/docs/strategy');
+                const text = await res.text();
+                document.getElementById('docContent').innerHTML = marked.parse(text);
+            } catch (e) {
+                document.getElementById('docContent').innerText = "Failed to load docs.";
+            }
+        }
+    </script>
+</body>
+</html>

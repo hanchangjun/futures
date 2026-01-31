@@ -611,7 +611,7 @@ def demo_signal() -> str:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--source", type=str, choices=["file", "tdx", "tq"], default="tq")
+    parser.add_argument("--source", type=str, choices=["file", "tdx", "tq", "db"], default="tq")
     parser.add_argument("--csv-dir", type=Path, default=Path("."))
     parser.add_argument("--csv-path", type=Path, default=None)
     parser.add_argument("--csv-path-daily", type=Path, default=None)
@@ -655,6 +655,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--cooldown-bars", type=int, default=5)
     parser.add_argument("--confirm-state-file", type=Path, default=Path("confirm_state.json"))
     parser.add_argument("--backtest", action="store_true")
+    parser.add_argument("--event-backtest", action="store_true", help="Run event-driven backtest")
     parser.add_argument("--backtest-wait", type=int, default=10)
     parser.add_argument("--init-state", action="store_true")
     parser.add_argument("--init-allow-normal", action="store_true")
@@ -674,6 +675,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--filter-breakout-m", type=int, default=20)
     parser.add_argument("--filter-atr-factor", type=float, default=0.5)
     parser.add_argument("--max-entries", type=int, default=2, help="Limit number of entries per trend leg")
+    parser.add_argument("--days", type=int, default=5, help="Backtest duration in days")
+    parser.add_argument("--filter-period", type=str, default=None, help="Period for MTF filtering (e.g. 1d)")
     return parser
 
 
@@ -686,6 +689,10 @@ def main() -> None:
         from runner.init_state import start_init
         ok = start_init(args, compute_dual_signal, signal_payload)
         print("初始化成功" if ok else "初始化未执行")
+        return
+    if args.event_backtest:
+        from runner.event_backtest import run_event_backtest
+        run_event_backtest(args)
         return
     if args.backtest:
         from runner.backtest_confirm import ConfirmBacktester

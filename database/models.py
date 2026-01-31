@@ -1,5 +1,6 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime, Index, UniqueConstraint
+from sqlalchemy import Column, Integer, String, Float, DateTime, Index, UniqueConstraint, Text, JSON
 from .connection import Base
+from datetime import datetime
 
 class StockBar(Base):
     __tablename__ = "stock_bars"
@@ -33,4 +34,29 @@ class ChanSignal(Base):
     price = Column(Float)
     desc = Column(String)        # 描述，例如 "底分型停顿", "中枢背驰"
     
-    created_at = Column(DateTime)
+    created_at = Column(DateTime, default=datetime.now)
+
+class BacktestResult(Base):
+    __tablename__ = "backtest_results"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    symbol = Column(String, index=True)
+    period = Column(String)
+    days = Column(Integer)
+    filter_period = Column(String)
+    
+    start_dt = Column(DateTime)
+    end_dt = Column(DateTime)
+    
+    initial_capital = Column(Float)
+    final_equity = Column(Float)
+    pnl = Column(Float)
+    roi = Column(Float)
+    total_trades = Column(Integer)
+    win_rate = Column(Float)
+    
+    trades = Column(JSON) # Store trades list as JSON
+    logs = Column(JSON)   # Store logs list as JSON
+    positions = Column(JSON) # Store final positions
+    
+    created_at = Column(DateTime, default=datetime.now)
