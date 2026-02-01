@@ -1,0 +1,28 @@
+scorer:
+  weights:
+    structure: 20
+    divergence: 20
+    volume_price: 10
+    time: 10
+    position: 10
+    sub_level: 10
+    strength: 10
+    confirmation: 10
+  
+  thresholds:
+    min_score: 60.0
+
+filter:
+  mandatory:
+    check_structure_complete: true
+    check_position_clear: true
+    check_fractal_confirmation: true
+  
+  exclusion:
+    major_news_window_minutes: 30
+    low_liquidity_window_minutes: 30
+    limit_move_percent: 2.0
+    contract_switch_week: true
+  
+  acceptance:
+    min_score: 70.0

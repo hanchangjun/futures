@@ -241,51 +241,60 @@ class ChanTradingSignals:
                 continue
                 
             # --- 3rd Class Signal (3B/3S) ---
-            leave_bi = bis[i-1]
-            
-            if leave_bi.direction == Trend.UP and curr_bi.direction == Trend.DOWN:
-                # Potential 3B
-                if leave_bi.high > valid_center.zg: # Left upwards
-                    if curr_bi.low > valid_center.zg: # Pullback didn't touch ZG
-                        signal_type = "3B"
-                        price = curr_bi.end_fx.price
-                        
-                        # Position Management
-                        pos = self.pos_mgr.calculate_position_size(signal_type)
-                        sl = self.pos_mgr.get_stoploss(signal_type, curr_bi.direction, price, valid_center, curr_bi, curr_bi.end_fx.date, atr)
-                        
-                        signals.append({
-                            "type": signal_type,
-                            "price": price,
-                            "desc": f"Pure 3B (Low {curr_bi.low} > ZG {valid_center.zg})",
-                            "dt": curr_bi.end_fx.date,
-                            "sl": sl,
-                            "tp": price + 2 * (price - valid_center.zg),
-                            "priority": 0.4,
-                            "pos": pos
-                        })
-            
-            elif leave_bi.direction == Trend.DOWN and curr_bi.direction == Trend.UP:
-                # Potential 3S
-                if leave_bi.low < valid_center.zd: # Left downwards
-                    if curr_bi.high < valid_center.zd: # Pullback didn't touch ZD
-                        signal_type = "3S"
-                        price = curr_bi.end_fx.price
-                        
-                        # Position Management
-                        pos = self.pos_mgr.calculate_position_size(signal_type)
-                        sl = self.pos_mgr.get_stoploss(signal_type, curr_bi.direction, price, valid_center, curr_bi, curr_bi.end_fx.date, atr)
-                        
-                        signals.append({
-                            "type": signal_type,
-                            "price": price,
-                            "desc": f"Pure 3S (High {curr_bi.high} < ZD {valid_center.zd})",
-                            "dt": curr_bi.end_fx.date,
-                            "sl": sl,
-                            "tp": price - 2 * (valid_center.zd - price),
-                            "priority": 0.4,
-                            "pos": pos
-                        })
+            # Strict Check: Must be the immediate pullback after leaving center (Departure Bi + Return Bi)
+            # Center ends at end_bi_index. Departure is end_bi_index+1. Return is end_bi_index+2.
+            if i - valid_center.end_bi_index == 2:
+                leave_bi = bis[i-1]
+                
+                if leave_bi.direction == Trend.UP and curr_bi.direction == Trend.DOWN:
+                    # Potential 3B
+                    # Ensure departure actually started from/below ZG (otherwise it was already floating above)
+                    # We check leave_bi.start_fx.price vs ZG. 
+                    # Since it's UP bi, start is Low.
+                    if leave_bi.start_fx.price <= valid_center.zg * 1.005: # Allow tiny buffer or strict <=
+                        if leave_bi.high > valid_center.zg: # Left upwards
+                            if curr_bi.low > valid_center.zg: # Pullback didn't touch ZG
+                                signal_type = "3B"
+                                price = curr_bi.end_fx.price
+                                
+                                # Position Management
+                                pos = self.pos_mgr.calculate_position_size(signal_type)
+                                sl = self.pos_mgr.get_stoploss(signal_type, curr_bi.direction, price, valid_center, curr_bi, curr_bi.end_fx.date, atr)
+                                
+                                signals.append({
+                                    "type": signal_type,
+                                    "price": price,
+                                    "desc": f"Pure 3B (Low {curr_bi.low} > ZG {valid_center.zg})",
+                                    "dt": curr_bi.end_fx.date,
+                                    "sl": sl,
+                                    "tp": price + 2 * (price - valid_center.zg),
+                                    "priority": 0.4,
+                                    "pos": pos
+                                })
+                
+                elif leave_bi.direction == Trend.DOWN and curr_bi.direction == Trend.UP:
+                    # Potential 3S
+                    # Ensure departure started from/above ZD
+                    if leave_bi.start_fx.price >= valid_center.zd * 0.995:
+                        if leave_bi.low < valid_center.zd: # Left downwards
+                            if curr_bi.high < valid_center.zd: # Pullback didn't touch ZD
+                                signal_type = "3S"
+                                price = curr_bi.end_fx.price
+                                
+                                # Position Management
+                                pos = self.pos_mgr.calculate_position_size(signal_type)
+                                sl = self.pos_mgr.get_stoploss(signal_type, curr_bi.direction, price, valid_center, curr_bi, curr_bi.end_fx.date, atr)
+                                
+                                signals.append({
+                                    "type": signal_type,
+                                    "price": price,
+                                    "desc": f"Pure 3S (High {curr_bi.high} < ZD {valid_center.zd})",
+                                    "dt": curr_bi.end_fx.date,
+                                    "sl": sl,
+                                    "tp": price - 2 * (valid_center.zd - price),
+                                    "priority": 0.4,
+                                    "pos": pos
+                                })
 
             # --- 1st Class Signal (1B/1S) ---
             prev_bi = bis[i-2]
@@ -455,35 +464,105 @@ class PureChanTheoryEngine:
                 
         return centers
 
+from .chan_core import ChanTheorySignalDetector, Signal
+from chan.common import Trend
+
 class PureChanStrategy:
     """
-    Implementation of the 'Pure Chan Theory' strategy based on user specifications.
+    Implementation of the 'Pure Chan Theory' strategy using the new Core Detector.
     """
     def __init__(self, symbol: str, period: str):
         self.symbol = symbol
         self.period = period
-        self.engine = PureChanTheoryEngine(symbol)
-        self.signal_system = ChanTradingSignals()
+        self.detector = ChanTheorySignalDetector({
+            '螺纹钢特性': {
+                '最小波动': 1,
+                '有效波动阈值': 10 if 'rb' in symbol.lower() else 0
+            }
+        })
+        self.pos_mgr = ChanPositionManagement() # Reuse existing
 
     def run(self, bars: List[PriceBar]) -> List[Dict]:
         if not bars:
             return []
 
-        # 1. Preprocess
-        chan_bars = merge_klines(bars) 
+        # Run Analysis
+        self.detector.analyze(bars)
         
-        # Calculate MACD
-        difs, deas, macd_bars = calculate_macd(bars)
+        # Convert Signals to Dicts
+        output_signals = []
+        
+        # Calculate ATR for SL/TP (Reuse helper)
+        atr = calculate_atr(bars)
+        
+        for sig in self.detector.买卖点记录:
+            # Map Signal to Output Format
+            # sig.type is '1B', '3B' etc.
+            
+            # Determine direction for PosMgr (If Signal is Buy, Trend was Down -> Up)
+            # Actually Signal Type tells us.
+            direction = Trend.DOWN if 'B' in sig.type else Trend.UP
+            # Note: ChanPositionManagement.get_stoploss expects 'direction' of the SIGNAL?
+            # get_stoploss(signal_type, direction, ...)
+            # Logic in get_stoploss: if direction == Trend.DOWN: Buy Signal.
+            # So we pass Trend.DOWN for Buy Signals.
+            
+            # We need to map new Bi/Center to SimpleBi/SimpleCenter expected by PosMgr?
+            # Or assume PosMgr uses duck typing?
+            # PosMgr uses: bi.low, bi.high, center.zg, center.zd.
+            # Our new classes have these (Bi.low, Zhongshu.ZG).
+            # But case might differ (ZG vs zg).
+            # Zhongshu has .ZG .ZD .GG .DD.
+            # SimpleCenter has .zg .zd .gg .dd.
+            # I should align them or modify PosMgr.
+            # Let's wrap/adapter or modify PosMgr to handle .ZG / .zg
+            # Or easier: Create an adapter object or just ensure attribute access works.
+            # Python is dynamic.
+            # SimpleCenter has .zg. Zhongshu has .ZG.
+            # I will check if I can alias them in Zhongshu class.
+            
+            # Map Bi/Center for PosMgr
+            # We pass sig.bi and sig.zhongshu
+            
+            # Pos Size
+            pos_info = self.pos_mgr.calculate_position_size(sig.type)
+            
+            # Stop Loss
+            # PosMgr expects: get_stoploss(signal_type, direction, entry_price, center, bi, date, atr)
+            # It accesses center.zg/zd and bi.low/high.
+            # Our new Zhongshu uses Uppercase ZG. SimpleCenter uses lowercase.
+            # I will modify the passed objects or PosMgr.
+            # Modifying PosMgr is risky if used elsewhere.
+            # I will add lowercase properties to Zhongshu class in chan_core.py.
+            
+            sl = self.pos_mgr.get_stoploss(
+                sig.type, 
+                direction, 
+                sig.price, 
+                sig.zhongshu, 
+                sig.bi, 
+                sig.time, 
+                atr
+            )
+            
+            # TP
+            # Simple logic: 2 * Risk or based on Center
+            tp = 0
+            if 'B' in sig.type:
+                tp = sig.zhongshu.ZG if sig.zhongshu else sig.price * 1.02
+            else:
+                tp = sig.zhongshu.ZD if sig.zhongshu else sig.price * 0.98
 
-        # 2. Run Engine
-        fractals = self.engine.detect_fractal(chan_bars, level='standard')
-        
-        # Pass MACD data to construct_bi
-        bis = self.engine.construct_bi(fractals, chan_bars, difs, deas, macd_bars)
-        
-        centers = self.engine.identify_segment_and_zhongshu(bis)
-        
-        # 3. Generate Signals
-        signals = self.signal_system.process_signals(bis, centers, bars)
-        
-        return signals
+            output_signals.append({
+                "type": sig.type,
+                "price": sig.price,
+                "desc": f"{sig.type} (Score: {sig.score})",
+                "dt": sig.time,
+                "sl": sl,
+                "tp": tp,
+                "priority": sig.score / 200.0, # 0.4-0.5 range
+                "pos": pos_info
+            })
+            
+        return output_signals
+

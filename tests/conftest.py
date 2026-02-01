@@ -1,81 +1,52 @@
 import pytest
-import sys
-import os
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
-from datetime import datetime
-
-# Add project root to sys.path
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-
-from database.connection import Base
-from database import models # Import models to register them
-from web.main import app, get_db
-from fastapi.testclient import TestClient
-from datafeed.base import PriceBar
-
-# Use in-memory SQLite for testing
-SQLALCHEMY_DATABASE_URL = "sqlite:///:memory:"
-
-engine = create_engine(
-    SQLALCHEMY_DATABASE_URL, 
-    connect_args={"check_same_thread": False},
-    poolclass=StaticPool
-)
-TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
-@pytest.fixture(scope="function")
-def db_session():
-    # Debug: Check if tables are registered
-    # print("Registered tables:", Base.metadata.tables.keys())
-    Base.metadata.create_all(bind=engine)
-    session = TestingSessionLocal()
-    try:
-        yield session
-    finally:
-        session.close()
-        Base.metadata.drop_all(bind=engine)
-
-@pytest.fixture(scope="function")
-def client(db_session):
-    def override_get_db():
-        try:
-            yield db_session
-        finally:
-            pass
-    
-    app.dependency_overrides[get_db] = override_get_db
-    yield TestClient(app)
-    del app.dependency_overrides[get_db]
+from strategy.third_class_config import ThirdClassConfig
+from strategy.third_class_signal import ThirdClassSignal
+from strategy.rules import ThirdClassRules
 
 @pytest.fixture
-def sample_bars():
-    # Create a simple trend: 5 bars up, 5 bars down
-    bars = []
-    base_price = 100.0
-    start_time = datetime(2023, 1, 1, 9, 0)
-    
-    # Up trend
-    for i in range(5):
-        bars.append(PriceBar(
-            date=start_time.replace(minute=i),
-            open=base_price + i,
-            high=base_price + i + 1,
-            low=base_price + i - 0.5,
-            close=base_price + i + 0.8,
-            volume=100
-        ))
-        
-    # Down trend
-    for i in range(5):
-        base = base_price + 5 - i
-        bars.append(PriceBar(
-            date=start_time.replace(minute=5+i),
-            open=base,
-            high=base + 0.5,
-            low=base - 1,
-            close=base - 0.8,
-            volume=100
-        ))
-    return bars
+def base_config():
+    return ThirdClassConfig()
+
+@pytest.fixture
+def signal_analyzer(base_config):
+    return ThirdClassSignal(base_config)
+
+@pytest.fixture
+def rules_engine(base_config):
+    return ThirdClassRules(base_config)
+
+@pytest.fixture
+def valid_3b_context():
+    return {
+        'zd': 100.0,
+        'zg': 110.0,
+        'gg': 115.0, # Center High
+        'dd': 95.0,  # Center Low
+        'center_bars': 20, # Segments
+        'leave_bar': {'high': 130.0, 'low': 110.0, 'count': 10},
+        'retrace_bar': {'high': 125.0, 'low': 115.0, 'count': 3}, # Low > ZG (115 > 110)
+        'volume_leave': 1000,
+        'volume_retrace': 500,
+        'higher_tf_buy': True,
+        'lower_tf_buy': True,
+        'higher_tf_sell': False,
+        'lower_tf_sell': False
+    }
+
+@pytest.fixture
+def valid_3s_context():
+    return {
+        'zd': 100.0,
+        'zg': 110.0,
+        'gg': 115.0,
+        'dd': 95.0,
+        'center_bars': 20,
+        'leave_bar': {'high': 100.0, 'low': 80.0, 'count': 10}, # Low < ZD (80 < 100)
+        'retrace_bar': {'high': 95.0, 'low': 85.0, 'count': 3}, # High < ZD (95 < 100)
+        'volume_leave': 1000,
+        'volume_retrace': 500,
+        'higher_tf_buy': False,
+        'lower_tf_buy': False,
+        'higher_tf_sell': True,
+        'lower_tf_sell': True
+    }

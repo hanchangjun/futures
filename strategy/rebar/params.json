@@ -1,0 +1,57 @@
+{
+    "time_filter": {
+        "trading_sessions": [
+            {"start": "09:00", "end": "11:30"},
+            {"start": "13:30", "end": "15:00"},
+            {"start": "21:00", "end": "23:00"}
+        ],
+        "force_close_windows": [
+            {"start": "09:00", "end": "09:30"},
+            {"start": "14:45", "end": "15:00"}
+        ]
+    },
+    "price_filter": {
+        "integer_barriers": [3600, 3700, 3800, 3900, 4000, 4100, 4200, 4300, 4400, 4500],
+        "barrier_range": 10,
+        "barrier_min_fluctuation": 5,
+        "limit_move_pct": {
+            "reduce_position_threshold": 0.05,
+            "reduce_position_target": 0.01,
+            "stop_opening_threshold": 0.07
+        }
+    },
+    "contract_switch": {
+        "months_before_delivery": 1,
+        "basis_thresholds": {
+            "deep_discount": -0.015,
+            "high_premium": 0.015
+        },
+        "weight_adjust": 0.3
+    },
+    "risk_control": {
+        "atr_period": 14,
+        "signals": {
+            "1B": {
+                "sl_multiplier": 1.2,
+                "initial_pos": 0.03,
+                "add_pos_target": 0.05,
+                "tp_trigger": "center_bottom_or_2b"
+            },
+            "2B": {
+                "initial_pos": 0.02,
+                "max_pos": 0.08,
+                "tp_trigger": "center_middle_or_top_fractal"
+            },
+            "3B": {
+                "initial_pos": 0.02,
+                "allow_add": false,
+                "tp_trigger": "prev_high_or_divergence"
+            }
+        },
+        "global": {
+            "slippage_ticks": 2,
+            "max_single_loss": 0.02,
+            "max_total_drawdown": 0.05
+        }
+    }
+}

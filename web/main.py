@@ -2,7 +2,7 @@ from fastapi import FastAPI, Depends, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, PlainTextResponse
 from sqlalchemy.orm import Session
 from typing import List, Optional
 import uvicorn
@@ -10,6 +10,7 @@ import os
 import sys
 import csv
 import io
+import json
 from datetime import timedelta
 
 # Add project root to path
@@ -99,7 +100,11 @@ def export_bars(symbol: str, period: str, days: int = 365, db: Session = Depends
 
 @app.get("/")
 def dashboard(request: Request):
-    return templates.TemplateResponse("index.html", {"request": request})
+    response = templates.TemplateResponse("index.html", {"request": request})
+    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+    return response
 
 @app.get("/api/bars/{symbol}/{period}")
 def read_bars(symbol: str, period: str, limit: int = 1000, db: Session = Depends(get_db)):
@@ -150,9 +155,9 @@ def read_strategy_docs():
     try:
         with open("docs/缠论策略说明.md", "r", encoding="utf-8") as f:
             content = f.read()
-        return {"content": content}
+        return PlainTextResponse(content)
     except Exception as e:
-        return {"content": f"Error loading documentation: {str(e)}"}
+        return PlainTextResponse(f"Error loading documentation: {str(e)}", status_code=500)
 
 @app.get("/api/analysis/{symbol}/{period}")
 def analyze_symbol(symbol: str, period: str, limit: int = 1000, strategy_name: str = "standard", db: Session = Depends(get_db)):
@@ -225,6 +230,11 @@ def analyze_symbol(symbol: str, period: str, limit: int = 1000, strategy_name: s
             fractals = find_fractals(chan_bars)
             bis = find_bi(chan_bars, fractals)
             centers = find_zhongshu(bis)
+
+            # Calculate Signals
+            from strategy.chan_strategy import ChanStrategy
+            strat = ChanStrategy(symbol, period)
+            signals = strat.run(bars)
         
         # 3. Serialize
         res_centers = []
@@ -415,6 +425,59 @@ def trigger_backtest(action: ActionRequest, db: Session = Depends(get_db)):
 def read_backtests(limit: int = 10, db: Session = Depends(get_db)):
     results = db.query(BacktestResult).order_by(BacktestResult.created_at.desc()).limit(limit).all()
     return results
+
+@app.get("/api/docs/file/{filename}")
+def read_doc_file(filename: str):
+    """
+    Read a markdown documentation file from the docs directory.
+    """
+    safe_filename = os.path.basename(filename)
+    file_path = os.path.join("docs", safe_filename)
+    
+    if not os.path.exists(file_path):
+        return PlainTextResponse(f"File not found: {safe_filename}", status_code=404)
+        
+    try:
+        with open(file_path, "r", encoding="utf-8") as f:
+            content = f.read()
+        return PlainTextResponse(content)
+    except Exception as e:
+        return PlainTextResponse(f"Error reading file: {str(e)}", status_code=500)
+
+@app.get("/api/config/rebar")
+def get_rebar_config():
+    """
+    Get Rebar Strategy Configuration (params.json).
+    """
+    config_path = "strategy/rebar/params.json"
+    if not os.path.exists(config_path):
+        return {"error": "Config file not found"}
+    
+    try:
+        with open(config_path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception as e:
+        return {"error": f"Failed to load config: {str(e)}"}
+
+@app.post("/api/config/rebar")
+async def update_rebar_config(request: Request):
+    """
+    Update Rebar Strategy Configuration.
+    """
+    config_path = "strategy/rebar/params.json"
+    try:
+        new_config = await request.json()
+        # Basic validation: check if it's a dict
+        if not isinstance(new_config, dict):
+             return {"error": "Invalid config format", "status": "failed"}
+             
+        # Write to file
+        with open(config_path, "w", encoding="utf-8") as f:
+            json.dump(new_config, f, indent=4, ensure_ascii=False)
+            
+        return {"status": "success", "message": "Config updated successfully"}
+    except Exception as e:
+        return {"error": f"Failed to update config: {str(e)}", "status": "failed"}
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
