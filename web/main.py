@@ -17,7 +17,7 @@ from datetime import timedelta
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from database.connection import get_db, engine, Base
-from database.models import StockBar, ChanSignal, BacktestResult
+from database.models import StockBar, ChanSignal, BacktestResult, TradeRecord
 from scripts.import_data import run_import
 from strategy.chan_strategy import run_strategy
 from datafeed.base import parse_timestamp, PriceBar
@@ -51,6 +51,25 @@ class ActionRequest(BaseModel):
     tq_user: Optional[str] = None
     tq_pass: Optional[str] = None
     strategy_name: Optional[str] = "standard"
+
+@app.get("/api/trades")
+def get_trades(
+    symbol: Optional[str] = None, 
+    status: Optional[str] = None, 
+    limit: int = 100, 
+    db: Session = Depends(get_db)
+):
+    """
+    Get trade history
+    """
+    query = db.query(TradeRecord)
+    if symbol:
+        query = query.filter(TradeRecord.symbol == symbol)
+    if status:
+        query = query.filter(TradeRecord.status == status)
+        
+    trades = query.order_by(TradeRecord.entry_time.desc()).limit(limit).all()
+    return {"data": trades}
 
 @app.get("/api/export/bars/{symbol}/{period}")
 def export_bars(symbol: str, period: str, days: int = 365, db: Session = Depends(get_db)):
@@ -210,16 +229,10 @@ def analyze_symbol(symbol: str, period: str, limit: int = 1000, strategy_name: s
             bis = engine.construct_bi(fractals, chan_bars, difs, deas, macd_bars)
             centers = engine.identify_segment_and_zhongshu(bis)
             
-            # Also generate signals and return them?
-            # The current /api/analysis response format is {"centers": [...], "bis_count": ...}
-            # We can add "signals" to it.
-            
+            # Use PureChanStrategy to get signals
             strat = PureChanStrategy(symbol, period)
-            strat.engine = engine # Reuse
-            signals = strat.signal_system.process_signals(bis, centers, bars)
-            
-            # Convert signals to dict if they aren't already
-            # process_signals returns List[Dict]
+            signals = strat.run(bars)
+
             
         else:
             # Standard Strategy
@@ -478,6 +491,35 @@ async def update_rebar_config(request: Request):
         return {"status": "success", "message": "Config updated successfully"}
     except Exception as e:
         return {"error": f"Failed to update config: {str(e)}", "status": "failed"}
+
+@app.get("/api/test/run")
+def run_system_diagnostics(type: str = "full"):
+    """
+    Triggers the integration test suite and returns the report.
+    type: 'full', 'signal_filter', 'rebar', 'real_time'
+    """
+    try:
+        # Import here to avoid circular dependency
+        # Ensure tests package is in path
+        project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        # Always promote project root to top of path to ensure local tests package is found
+        if project_root in sys.path:
+            sys.path.remove(project_root)
+        sys.path.insert(0, project_root)
+            
+        import tests.integration_test
+        from tests.integration_test import run_diagnostics
+        
+        result = run_diagnostics(type)
+        return result
+    except Exception as e:
+        import traceback
+        debug_info = f"sys.path: {sys.path}\nProject Root: {project_root}\nRoot Contents: {os.listdir(project_root)}"
+        return {
+            "status": "ERROR",
+            "report": f"Failed to run tests: {str(e)}\n\nDebug Info:\n{debug_info}\n\nTraceback:\n{traceback.format_exc()}",
+            "timestamp": datetime.now().isoformat()
+        }
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)

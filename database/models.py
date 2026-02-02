@@ -36,6 +36,38 @@ class ChanSignal(Base):
     
     created_at = Column(DateTime, default=datetime.now)
 
+class TradeRecord(Base):
+    """
+    实盘/模拟交易记录
+    """
+    __tablename__ = "trade_records"
+
+    id = Column(Integer, primary_key=True, index=True)
+    symbol = Column(String, index=True, nullable=False)
+    direction = Column(String, nullable=False)  # BUY, SELL
+    status = Column(String, default="OPEN")     # OPEN, CLOSED
+    
+    # Entry
+    entry_price = Column(Float, nullable=False)
+    entry_time = Column(DateTime, nullable=False)
+    entry_signal_id = Column(String)            # Reference to signal ID
+    
+    # Risk
+    stop_loss = Column(Float)
+    take_profit = Column(Float)
+    
+    # Exit
+    exit_price = Column(Float, nullable=True)
+    exit_time = Column(DateTime, nullable=True)
+    exit_reason = Column(String, nullable=True) # TP, SL, MANUAL, SIGNAL
+    
+    # Result
+    pnl = Column(Float, nullable=True)          # Absolute PnL
+    roi = Column(Float, nullable=True)          # Percentage
+    
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
 class BacktestResult(Base):
     __tablename__ = "backtest_results"
     

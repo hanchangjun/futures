@@ -24,7 +24,7 @@ class Bi:
     """笔的数据结构"""
     
     def __init__(self, bi_id, direction, start_price, end_price, 
-                 start_time, end_time, high, low, bars):
+                 start_time, end_time, high, low, bars, start_index=0, end_index=0):
         self.id = bi_id
         self.direction = direction  # 'up' or 'down'
         self.start_price = start_price
@@ -33,12 +33,9 @@ class Bi:
         self.end_time = end_time
         self.high = high           # 笔内最高价
         self.low = low             # 笔内最低价
-        self.bars = bars           # 包含的K线数量 (Count or List? User said 'bars', context implies count or list. Logic uses 'bars' for count?)
-                                   # User's code: self.bars = bars. 
-                                   # Method duration() uses time.
-                                   # Let's assume bars is Count for now, or List of bars? 
-                                   # Usually helpful to have List. Let's store List if possible, or Count if lightweight.
-                                   # User input comment: "包含的K线数量". So it's an int.
+        self.bars = bars           # 包含的K线数量
+        self.start_index = start_index # 在原始K线列表中的起始索引
+        self.end_index = end_index     # 在原始K线列表中的结束索引
         self.macd_data = None      # MACD指标数据
         self.volume_sum = 0        # 笔内成交量总和
         self.所属中枢 = None        # 所属的中枢
@@ -105,6 +102,46 @@ class Signal:
 
 # --- Detector ---
 
+class Segment:
+    """线段 (Segment)"""
+    def __init__(self, start_bi, end_bi, bi_list, direction):
+        self.start_bi = start_bi
+        self.end_bi = end_bi
+        self.bi_list = bi_list
+        self.direction = direction # 'up' or 'down'
+        
+        self.start_time = start_bi.start_time
+        self.end_time = end_bi.end_time
+        
+        if self.direction == 'up':
+            self.low = start_bi.low
+            self.high = end_bi.high
+            self.start_price = self.low
+            self.end_price = self.high
+        else:
+            self.high = start_bi.high
+            self.low = end_bi.low
+            self.start_price = self.high
+            self.end_price = self.low
+
+class StandardZhongshu:
+    """标准中枢 (Standard Center formed by Segments)"""
+    def __init__(self, zs_id, zg, zd, gg, dd, start_time, end_time, segments):
+        self.zs_id = zs_id
+        self.zg = zg # High of Lows (Upper bound of overlap)
+        self.zd = zd # Low of Highs (Lower bound of overlap)
+        self.gg = gg # High of Highs
+        self.dd = dd # Low of Lows
+        self.start_time = start_time
+        self.end_time = end_time
+        self.segments = segments
+        self.level = 'segment'
+        
+    @property
+    def ZG(self): return self.zg
+    @property
+    def ZD(self): return self.zd
+
 class ChanTheorySignalDetector:
     """缠论三类买卖点检测器"""
     
@@ -166,8 +203,14 @@ class ChanTheorySignalDetector:
         
         # 4. Identify Zhongshus
         self._identify_zhongshus()
+
+        # 5. Identify Segments
+        self._identify_segments()
         
-        # 5. Detect Signals
+        # 6. Identify Standard Zhongshus
+        self._identify_standard_zhongshus()
+        
+        # 7. Detect Signals
         self._detect_signals(self.chan_bars)
 
     def _calculate_indicators(self, bars):
@@ -288,7 +331,9 @@ class ChanTheorySignalDetector:
                 end_time=fx['time'],
                 high=high,
                 low=low,
-                bars=abs(fx['index'] - curr_start_fx['index'])
+                bars=abs(fx['index'] - curr_start_fx['index']),
+                start_index=curr_start_fx['orig_index'],
+                end_index=fx['orig_index']
             )
             bi.macd_data = {
                 'sum': macd_sum,
@@ -356,6 +401,99 @@ class ChanTheorySignalDetector:
             else:
                 i += 1
 
+    def _identify_segments(self):
+        """
+        识别线段 (Segments)
+        基于笔的特征序列分型识别
+        """
+        self.线段列表 = []
+        bis = self.笔列表
+        if len(bis) < 3:
+            return
+
+        potential_points = [] 
+        
+        for i in range(1, len(bis)-1):
+            prev = bis[i-1]
+            curr = bis[i]
+            next_b = bis[i+1]
+            
+            # Top Fenxing
+            if curr.high > prev.high and curr.high > next_b.high:
+                potential_points.append({'index': i, 'type': 'top', 'price': curr.high})
+            # Bottom Fenxing
+            elif curr.low < prev.low and curr.low < next_b.low:
+                potential_points.append({'index': i, 'type': 'bottom', 'price': curr.low})
+        
+        if not potential_points:
+            return
+            
+        segments = []
+        curr_start = potential_points[0]
+        
+        for i in range(1, len(potential_points)):
+            p = potential_points[i]
+            
+            if p['type'] == curr_start['type']:
+                if p['type'] == 'top' and p['price'] > curr_start['price']:
+                    curr_start = p
+                elif p['type'] == 'bottom' and p['price'] < curr_start['price']:
+                    curr_start = p
+                continue
+            
+            if p['index'] - curr_start['index'] >= 3:
+                direction = 'down' if curr_start['type'] == 'top' else 'up'
+                seg_bis = bis[curr_start['index'] : p['index'] + 1]
+                seg = Segment(bis[curr_start['index']], bis[p['index']], seg_bis, direction)
+                segments.append(seg)
+                curr_start = p
+                
+        self.线段列表 = segments
+
+    def _identify_standard_zhongshus(self):
+        """
+        识别标准中枢 (Standard Zhongshu)
+        基于线段列表构建
+        """
+        self.标准中枢列表 = []
+        segs = self.线段列表
+        if len(segs) < 3:
+            return
+            
+        i = 0
+        zs_id_counter = 0
+        
+        while i <= len(segs) - 3:
+            s1 = segs[i]
+            s2 = segs[i+1]
+            s3 = segs[i+2]
+            
+            zg = min(s1.high, s2.high, s3.high)
+            zd = max(s1.low, s2.low, s3.low)
+            
+            if zg > zd:
+                zs_id_counter += 1
+                gg = max(s1.high, s2.high, s3.high)
+                dd = min(s1.low, s2.low, s3.low)
+                zs_segs = [s1, s2, s3]
+                
+                j = i + 3
+                while j < len(segs):
+                    sn = segs[j]
+                    if not (sn.high < zd or sn.low > zg):
+                        zs_segs.append(sn)
+                        gg = max(gg, sn.high)
+                        dd = min(dd, sn.low)
+                        j += 1
+                    else:
+                        break
+                        
+                zs = StandardZhongshu(zs_id_counter, zg, zd, gg, dd, s1.start_time, zs_segs[-1].end_time, zs_segs)
+                self.标准中枢列表.append(zs)
+                i = j 
+            else:
+                i += 1
+
     def _detect_signals(self, bars):
         """
         Detect 1B/2B/3B Signals.
@@ -398,7 +536,8 @@ class ChanTheorySignalDetector:
             context = {
                 'zhongshu_list': current_centers,
                 'bi_list': bis[:i+1],
-                'signals': self.买卖点记录
+                'signals': self.买卖点记录,
+                'bars': bars
             }
             
             if curr_bi.direction == 'down': # Potential 1B

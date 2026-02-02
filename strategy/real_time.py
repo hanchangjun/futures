@@ -8,6 +8,7 @@ from datafeed import get_bars, PriceBar
 from strategy.rebar_strategy import RebarOptimizedChanSystem
 from strategy.notification import WeChatNotifier
 from strategy.chan_core import Signal
+from strategy.position_manager import PositionManager
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +38,7 @@ class RealTimeTradingSystem:
         # Initialize components
         self.notifier = notifier or WeChatNotifier(webhook_url=webhook_url)
         self.strategy = RebarOptimizedChanSystem(config=strategy_config or {})
+        self.position_manager = PositionManager(symbol)
         
         self.last_signal_time = None
         self.running = False
@@ -94,6 +96,15 @@ class RealTimeTradingSystem:
         if not bars:
             logger.warning(f"No data retrieved for {self.symbol}: {msg}")
             return
+            
+        current_bar = bars[-1]
+        current_price = current_bar.close
+        current_time = current_bar.date or datetime.now()
+
+        # 0. Check Positions (TP/SL)
+        events = self.position_manager.check_conditions(current_price, current_time)
+        for event in events:
+            self._send_position_event_notification(event)
 
         # 2. Run Strategy Analysis
         # RebarOptimizedChanSystem.analyze expects raw bars
@@ -117,8 +128,21 @@ class RealTimeTradingSystem:
         self.last_signal_time = latest_signal.time
         
         # 5. Process Signal (Notify instead of Execute)
-        current_price = bars[-1].close
         self._send_notification(latest_signal, current_price)
+
+    def _send_position_event_notification(self, event: Dict[str, Any]):
+        """Send TP/SL notification"""
+        emoji = "💰" if event['pnl'] > 0 else "💸"
+        content = (
+            f"{emoji} **平仓通知**\n"
+            f"-----------------------\n"
+            f"类型: {event['type']} (Stop/Limit)\n"
+            f"方向: {event['direction']}\n"
+            f"价格: {event['price']}\n"
+            f"盈亏: {event['pnl']:.2f}\n"
+            f"时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+        )
+        self.notifier.send_text(content)
 
     def _send_notification(self, signal: Signal, current_price: float):
         """Send signal notification via WeChat"""
@@ -148,5 +172,7 @@ class RealTimeTradingSystem:
             "take_profit": round(take_profit, 2)
         }
         
-        logger.info(f"New Signal Detected: {signal.type} at {signal.time}. Sending notification...")
+        # Record Position
+        self.position_manager.open_position(signal, order_info['stop_loss'], order_info['take_profit'])
+        
         self.notifier.send_order_notification(order_info)

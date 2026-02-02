@@ -320,6 +320,12 @@
             <li class="nav-item" onclick="switchTab('docs')">
                 <span>文档 Docs</span>
             </li>
+            <li class="nav-item" onclick="switchTab('trades')">
+                <span>📋</span> 交易记录 Trade
+            </li>
+            <li class="nav-item" onclick="switchTab('system')">
+                <span>系统诊断 System</span>
+            </li>
         </ul>
 
         <div class="status-box">
@@ -585,6 +591,62 @@
                 </div>
             </div>
 
+            <!-- Trades Tab -->
+            <div id="trades" class="tab-content">
+                <div class="card">
+                    <div class="card-header">
+                        <h4 class="card-title">实盘交易记录 (Trade History)</h4>
+                        <div class="control-row">
+                             <select id="trade_filter_symbol" onchange="loadTradeRecords()">
+                                <option value="">所有合约</option>
+                                <option value="KQ.m@SHFE.rb">螺纹钢</option>
+                                <option value="KQ.m@CZCE.FG">玻璃</option>
+                             </select>
+                             <button onclick="loadTradeRecords()">刷新列表</button>
+                        </div>
+                    </div>
+                    <div style="overflow-x: auto;">
+                        <table id="tradeHistoryTable">
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>合约</th>
+                                    <th>方向</th>
+                                    <th>状态</th>
+                                    <th>开仓时间</th>
+                                    <th>开仓价</th>
+                                    <th>平仓时间</th>
+                                    <th>平仓价</th>
+                                    <th>盈亏 (PnL)</th>
+                                    <th>收益率</th>
+                                    <th>原因</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- System Tab -->
+            <div id="system" class="tab-content">
+                <div class="card">
+                    <div class="card-header">
+                        <h4 class="card-title">系统诊断 System Diagnostics</h4>
+                        <div class="control-row" style="gap: 10px; flex-wrap: wrap;">
+                            <button class="primary" onclick="runSystemTest('full')">运行完整测试 Full Test</button>
+                            <button onclick="runSystemTest('signal_filter')">信号过滤 Signal Filter</button>
+                            <button onclick="runSystemTest('rebar')">螺纹钢策略 Rebar Strategy</button>
+                            <button onclick="runSystemTest('real_time')">实时交易系统 Real-Time</button>
+                        </div>
+                    </div>
+                    <div style="margin-top: 20px;">
+                        <div id="testStatus" style="font-weight: bold; margin-bottom: 10px;"></div>
+                        <div id="testReport" class="markdown-body" style="background: #111; padding: 20px; border-radius: 4px; border: 1px solid var(--border-color); font-family: monospace; white-space: pre-wrap;">点击上方按钮开始测试...</div>
+                    </div>
+                </div>
+            </div>
+
         </div>
     </main>
 
@@ -632,6 +694,9 @@
             }
             if (tabId === 'docs') {
                 loadDocs();
+            }
+            if (tabId === 'trades') {
+                loadTradeRecords();
             }
         }
 
@@ -851,6 +916,13 @@
                 const dea = calcEMA(diff, 9);
                 const macd = diff.map((v, i) => (v - dea[i]) * 2);
 
+                // Strategy Specific Indicators
+                let ema5 = [], ema13 = [];
+                if (strategy === 'pure_chan') {
+                    ema5 = calcEMA(closes, 5);
+                    ema13 = calcEMA(closes, 13);
+                }
+
                 // Prepare MarkAreas (ZhongShu)
                 const markAreas = [];
                 if (Array.isArray(centers)) {
@@ -883,7 +955,7 @@
                         borderColor: '#333',
                         textStyle: { color: '#e0e0e0' }
                     },
-                    legend: { data: ['K-Line', 'MACD', 'Bi', 'Seg'], textStyle: { color: '#a0a0a0' } },
+                    legend: { data: ['K-Line', 'EMA5', 'EMA13', 'MACD', 'DIFF', 'DEA', 'Bi', 'Seg'], textStyle: { color: '#a0a0a0' } },
                     grid: [
                         { left: '3%', right: '3%', top: '10%', height: '60%' },
                         { left: '3%', right: '3%', top: '75%', height: '20%' }
@@ -925,6 +997,22 @@
                             }
                         },
                         {
+                            name: 'EMA5',
+                            type: 'line',
+                            data: strategy === 'pure_chan' ? ema5 : [],
+                            smooth: true,
+                            showSymbol: false,
+                            lineStyle: { width: 1, color: '#e0e0e0' } // White
+                        },
+                        {
+                            name: 'EMA13',
+                            type: 'line',
+                            data: strategy === 'pure_chan' ? ema13 : [],
+                            smooth: true,
+                            showSymbol: false,
+                            lineStyle: { width: 1, color: '#ffc107' } // Yellow
+                        },
+                        {
                             name: 'MACD',
                             type: 'bar',
                             xAxisIndex: 1,
@@ -933,6 +1021,24 @@
                             itemStyle: {
                                 color: (params) => params.value > 0 ? '#ff1744' : '#00e676'
                             }
+                        },
+                        {
+                            name: 'DIFF',
+                            type: 'line',
+                            xAxisIndex: 1,
+                            yAxisIndex: 1,
+                            data: diff,
+                            showSymbol: false,
+                            lineStyle: { width: 1, color: '#e0e0e0' } // White
+                        },
+                        {
+                            name: 'DEA',
+                            type: 'line',
+                            xAxisIndex: 1,
+                            yAxisIndex: 1,
+                            data: dea,
+                            showSymbol: false,
+                            lineStyle: { width: 1, color: '#ffc107' } // Yellow
                         },
                         {
                             name: 'Bi',
@@ -1050,6 +1156,47 @@
             } else {
                 log('Auto update disabled');
                 clearInterval(window.autoTimer);
+            }
+        }
+
+        async function runSystemTest(type = 'full') {
+            const statusEl = document.getElementById('testStatus');
+            const reportEl = document.getElementById('testReport');
+            
+            const titles = {
+                'full': 'System Diagnostics',
+                'signal_filter': 'Signal Filter Tests',
+                'rebar': 'Rebar Strategy Tests',
+                'real_time': 'Real-Time System Tests'
+            };
+            
+            statusEl.innerText = `Running ${titles[type]}... Please wait...`;
+            statusEl.style.color = "var(--warning)";
+            reportEl.innerHTML = "Loading...";
+            
+            try {
+                const res = await fetch(`/api/test/run?type=${type}`);
+                const data = await res.json();
+                
+                if (data.status === 'PASS' || data.status === 'success') {
+                     statusEl.innerText = "TEST PASSED";
+                     statusEl.style.color = "var(--success)";
+                } else {
+                     statusEl.innerText = "TEST FAILED/ERROR";
+                     statusEl.style.color = "var(--danger)";
+                }
+                
+                // Render Markdown
+                if (typeof marked !== 'undefined') {
+                    reportEl.innerHTML = marked.parse(data.report || "No report generated.");
+                } else {
+                    reportEl.innerText = data.report;
+                }
+                
+            } catch (e) {
+                statusEl.innerText = "NETWORK ERROR";
+                statusEl.style.color = "var(--danger)";
+                reportEl.innerText = "Error running tests: " + e.message;
             }
         }
 
@@ -1196,6 +1343,50 @@
             if (!item) return;
             document.getElementById('bt_result').innerText = JSON.stringify(item, null, 2);
             switchTab('backtest'); // Ensure we are on the tab
+        }
+
+        async function loadTradeRecords() {
+            const symbol = document.getElementById('trade_filter_symbol').value;
+            let url = '/api/trades?limit=100';
+            if (symbol) url += `&symbol=${symbol}`;
+            
+            try {
+                const res = await fetch(url);
+                const result = await res.json();
+                const trades = result.data;
+                
+                const tbody = document.querySelector('#tradeHistoryTable tbody');
+                tbody.innerHTML = '';
+                
+                if (!trades || trades.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="11" style="text-align:center; color:var(--text-muted)">暂无交易记录</td></tr>';
+                    return;
+                }
+                
+                trades.forEach(t => {
+                    const pnlClass = (t.pnl > 0) ? 'var(--success)' : (t.pnl < 0 ? 'var(--danger)' : '');
+                    const pnlText = t.pnl !== null ? t.pnl.toFixed(2) : '-';
+                    const roiText = t.roi !== null ? (t.roi * 100).toFixed(2) + '%' : '-';
+                    
+                    const row = `<tr>
+                        <td>${t.id}</td>
+                        <td>${t.symbol}</td>
+                        <td><span class="badge ${t.direction === 'BUY' ? 'badge-1B' : 'badge-1S'}">${t.direction}</span></td>
+                        <td>${t.status}</td>
+                        <td>${new Date(t.entry_time).toLocaleString()}</td>
+                        <td>${t.entry_price.toFixed(2)}</td>
+                        <td>${t.exit_time ? new Date(t.exit_time).toLocaleString() : '-'}</td>
+                        <td>${t.exit_price ? t.exit_price.toFixed(2) : '-'}</td>
+                        <td style="color:${pnlClass}">${pnlText}</td>
+                        <td style="color:${pnlClass}">${roiText}</td>
+                        <td>${t.exit_reason || '-'}</td>
+                    </tr>`;
+                    tbody.innerHTML += row;
+                });
+            } catch (e) {
+                console.error("Load trades error:", e);
+                log("Error loading trades: " + e.message);
+            }
         }
     </script>
 </body>
