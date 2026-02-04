@@ -9,31 +9,45 @@ class StockBar(Base):
     symbol = Column(String, index=True, nullable=False)
     period = Column(String, index=True, nullable=False)  # 1m, 5m, 30m, 1d
     dt = Column(DateTime, index=True, nullable=False)
-    
+
     open = Column(Float)
     high = Column(Float)
     low = Column(Float)
     close = Column(Float)
     volume = Column(Float)
     amount = Column(Float)  # 成交额
-    
-    # 唯一约束，避免重复数据
+
+    # 优化：添加复合索引，加速常见查询
+    # 查询模式1：symbol + period + dt (最常见)
+    # 查询模式2：symbol + dt
+    # 查询模式3：dt (时间范围查询)
     __table_args__ = (
         UniqueConstraint('symbol', 'period', 'dt', name='uix_symbol_period_dt'),
+        Index('idx_symbol_period_dt', 'symbol', 'period', 'dt'),
+        Index('idx_symbol_dt', 'symbol', 'dt'),
+        Index('idx_dt', 'dt'),
+        Index('idx_close', 'close'),  # 用于价格相关查询
     )
 
 class ChanSignal(Base):
     __tablename__ = "chan_signals"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     symbol = Column(String, index=True)
     period = Column(String)
     dt = Column(DateTime)
-    
+
     signal_type = Column(String) # 1B, 2B, 3B, 1S, 2S, 3S
     price = Column(Float)
     desc = Column(String)        # 描述，例如 "底分型停顿", "中枢背驰"
-    
+
+    # 优化：添加复合索引
+    __table_args__ = (
+        Index('idx_symbol_dt', 'symbol', 'dt'),
+        Index('idx_signal_type', 'signal_type'),
+        Index('idx_symbol_type', 'symbol', 'signal_type'),
+    )
+
     created_at = Column(DateTime, default=datetime.now)
 
 class TradeRecord(Base):
@@ -70,25 +84,32 @@ class TradeRecord(Base):
 
 class BacktestResult(Base):
     __tablename__ = "backtest_results"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     symbol = Column(String, index=True)
     period = Column(String)
     days = Column(Integer)
     filter_period = Column(String)
-    
+
     start_dt = Column(DateTime)
     end_dt = Column(DateTime)
-    
+
     initial_capital = Column(Float)
     final_equity = Column(Float)
     pnl = Column(Float)
     roi = Column(Float)
     total_trades = Column(Integer)
     win_rate = Column(Float)
-    
+
+    # 优化：添加索引
+    __table_args__ = (
+        Index('idx_symbol_period', 'symbol', 'period'),
+        Index('idx_roi', 'roi'),
+        Index('idx_created_at', 'created_at'),
+    )
+
     trades = Column(JSON) # Store trades list as JSON
     logs = Column(JSON)   # Store logs list as JSON
     positions = Column(JSON) # Store final positions
-    
+
     created_at = Column(DateTime, default=datetime.now)
