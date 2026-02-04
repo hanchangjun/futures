@@ -178,26 +178,55 @@ class ThirdClassSignalDetector:
         """
         过滤条件
         """
-        bars = context.get('bars', [])
+        # Debug: Confirm running version
+        # print(f"DEBUG: _check_filters running for bi {bi.start_time}")
         
-        # 1. 流动性不足时段 (如 23:00 - 09:00, 视品种而定)
-        # 这里简单过滤极小成交量的情况
-        if bi.volume_sum == 0:
-            return True
+        try:
+            bars = context.get('bars', [])
             
-        # 2. 临近重要支撑位 (MA120)
-        # 计算当前价格与MA120的关系
-        if bars and len(bars) > 120:
-            # 简单计算MA120
-            # 注意：这是昂贵的操作，应该预计算。但为了独立性，这里取最近120根
-            recent_closes = [b.close for b in bars[-120:]]
-            ma120 = sum(recent_closes) / len(recent_closes)
-            
-            # 如果做空(3S)，且价格刚好处在MA120支撑位附近 (±0.5%)
-            if abs(bi.high - ma120) / ma120 < 0.005 and bi.high > ma120:
-                # 支撑位附近，谨慎做空
+            # 1. 流动性不足时段 (如 23:00 - 09:00, 视品种而定)
+            # 这里简单过滤极小成交量的情况
+            if bi.volume_sum == 0:
                 return True
                 
+            # 2. 临近重要支撑位 (MA120)
+            # 计算当前价格与MA120的关系
+            if bars and len(bars) > 120:
+                # 简单计算MA120
+                # 注意：这是昂贵的操作，应该预计算。但为了独立性，这里取最近120根
+                # Fix: Ensure we access .close correctly for all bars
+                # 'bars' might be a list of PriceBar objects or objects with .close attribute.
+                try:
+                    recent_closes = []
+                    # Check if bars is DataFrame-like (has .iloc)
+                    if hasattr(bars, 'iloc'):
+                         recent_closes = bars['close'].tail(120).values
+                    else:
+                         # Use list comprehension with safe attribute access
+                         def get_close(b):
+                             if hasattr(b, 'close'):
+                                 return b.close
+                             elif hasattr(b, 'high') and hasattr(b, 'low'):
+                                 return (b.high + b.low) / 2
+                             else:
+                                 return 0.0
+                                 
+                         recent_closes = [get_close(b) for b in bars[-120:]]
+
+                    ma120 = sum(recent_closes) / len(recent_closes) if recent_closes else 0
+                    
+                    # 如果做空(3S)，且价格刚好处在MA120支撑位附近 (±0.5%)
+                    if ma120 > 0 and abs(bi.high - ma120) / ma120 < 0.005 and bi.high > ma120:
+                        # 支撑位附近，谨慎做空
+                        return True
+                except Exception as e:
+                    # If any error accessing close, just skip filter
+                    print(f"Warning: _check_filters inner error: {e}")
+                    return False
+        except Exception as e:
+             print(f"Warning: _check_filters outer error: {e}")
+             return False
+            
         return False
 
     def _get_last_completed_zhongshu(self, context: Dict[str, Any]) -> Optional[Zhongshu]:

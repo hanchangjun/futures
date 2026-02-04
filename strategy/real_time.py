@@ -9,6 +9,10 @@ from strategy.rebar_strategy import RebarOptimizedChanSystem
 from strategy.notification import WeChatNotifier
 from strategy.chan_core import Signal
 from strategy.position_manager import PositionManager
+from database.connection import SessionLocal
+from database.models import StockBar
+from sqlalchemy import func
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 logger = logging.getLogger(__name__)
 
@@ -106,6 +110,12 @@ class RealTimeTradingSystem:
         for event in events:
             self._send_position_event_notification(event)
 
+        # 1.5 Save Data to DB
+        try:
+            self._save_to_db(bars)
+        except Exception as e:
+            logger.error(f"Failed to save bars to DB: {e}")
+
         # 2. Run Strategy Analysis
         # RebarOptimizedChanSystem.analyze expects raw bars
         self.strategy.analyze(bars)
@@ -176,3 +186,62 @@ class RealTimeTradingSystem:
         self.position_manager.open_position(signal, order_info['stop_loss'], order_info['take_profit'])
         
         self.notifier.send_order_notification(order_info)
+
+    def _save_to_db(self, bars: List[PriceBar]):
+        """Save new bars to database"""
+        if not bars:
+            return
+            
+        session = SessionLocal()
+        try:
+            # 1. Get latest timestamp in DB
+            latest_dt = session.query(func.max(StockBar.dt)).filter(
+                StockBar.symbol == self.symbol,
+                StockBar.period == self.period
+            ).scalar()
+            
+            # 2. Filter new bars
+            new_bars = []
+            start_dt = latest_dt if latest_dt else datetime.min
+            
+            for bar in bars:
+                if not bar.date:
+                    continue
+                if bar.date > start_dt:
+                    new_bars.append({
+                        "symbol": self.symbol,
+                        "period": self.period,
+                        "dt": bar.date,
+                        "open": bar.open,
+                        "high": bar.high,
+                        "low": bar.low,
+                        "close": bar.close,
+                        "volume": bar.volume
+                    })
+            
+            if not new_bars:
+                return
+
+            # 3. Bulk Insert (using Core for speed, or ORM)
+            # Since we filtered by time, collisions should be rare unless concurrent writes.
+            # But to be safe against unique constraint violations (e.g. if time check failed slightly),
+            # we can just use bulk_save_objects or core insert.
+            # Given we have a unique constraint, let's use a safe approach.
+            # For PostgreSQL, we can use ON CONFLICT DO NOTHING.
+            # But let's stick to standard SQLAlchemy for now and rely on our date filter.
+            # If we strictly filter > latest_dt, we shouldn't have conflicts.
+            
+            # However, if latest_dt is None (empty table), we insert all.
+            # If we are re-running, maybe some overlap? 
+            # Let's trust the filter for now.
+            
+            session.bulk_insert_mappings(StockBar, new_bars)
+            session.commit()
+            logger.info(f"Saved {len(new_bars)} new bars to DB for {self.symbol}")
+            
+        except Exception as e:
+            session.rollback()
+            logger.error(f"DB Save Error: {e}")
+            raise
+        finally:
+            session.close()

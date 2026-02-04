@@ -19,6 +19,8 @@ class ChanBar:
     date: datetime
     high: float
     low: float
+    open: float         # 开盘价 (第一根包含K线的开盘价)
+    close: float        # 收盘价 (最后一根包含K线的收盘价)
     elements: List[int] # 包含的原始K线索引列表
 
 @dataclass

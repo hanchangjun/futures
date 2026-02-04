@@ -645,6 +645,37 @@
                         <div id="testReport" class="markdown-body" style="background: #111; padding: 20px; border-radius: 4px; border: 1px solid var(--border-color); font-family: monospace; white-space: pre-wrap;">点击上方按钮开始测试...</div>
                     </div>
                 </div>
+                <div class="card">
+                    <div class="card-header">
+                        <h4 class="card-title">实时系统控制 Real-Time Control</h4>
+                    </div>
+                    <div class="control-row" style="gap: 10px; flex-wrap: wrap;">
+                        <div style="display:flex; flex-direction:column; gap:5px;">
+                            <label class="text-small text-muted">合约</label>
+                            <input type="text" id="rt_symbol" value="rb2505" style="width:140px;">
+                        </div>
+                        <div style="display:flex; flex-direction:column; gap:5px;">
+                            <label class="text-small text-muted">数据源</label>
+                            <select id="rt_source" style="width:120px;">
+                                <option value="tdx" selected>TDX</option>
+                                <option value="tq">TQSDK</option>
+                                <option value="db">DB</option>
+                            </select>
+                        </div>
+                        <div style="display:flex; flex-direction:column; gap:5px; min-width:260px;">
+                            <label class="text-small text-muted">企业微信Webhook</label>
+                            <input type="text" id="rt_webhook" placeholder="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=..." style="min-width:260px;">
+                        </div>
+                        <div style="display:flex; align-items:flex-end; gap:10px;">
+                            <button class="primary" onclick="startRealtime()">启动 Start</button>
+                            <button onclick="stopRealtime()">停止 Stop</button>
+                        </div>
+                        <div style="display:flex; flex-direction:column; gap:5px;">
+                            <label class="text-small text-muted">状态</label>
+                            <div id="rt_status" class="text-small text-muted">Unknown</div>
+                        </div>
+                    </div>
+                </div>
             </div>
 
         </div>
@@ -673,6 +704,7 @@
             loadDocs();
             loadBacktestHistory();
             loadChart(); // Auto load chart on start
+            loadRealtimeStatus();
         };
 
         // --- Tabs ---
@@ -1159,6 +1191,55 @@
             }
         }
 
+        async function loadRealtimeStatus() {
+            try {
+                const res = await fetch('/api/realtime/status');
+                const data = await res.json();
+                const el = document.getElementById('rt_status');
+                if (data.running) {
+                    el.innerText = `运行中 | ${data.symbol} (${data.period}) | ${data.data_source} | 每${Math.round(data.update_interval/60)}分钟`;
+                } else {
+                    el.innerText = '未运行';
+                }
+            } catch (e) {
+                console.error(e);
+                const el = document.getElementById('rt_status');
+                if (el) el.innerText = '状态获取失败';
+            }
+        }
+        async function startRealtime() {
+            const symbol = document.getElementById('rt_symbol').value;
+            const source = document.getElementById('rt_source').value;
+            const webhook = document.getElementById('rt_webhook').value;
+            log(`Starting Real-Time System for ${symbol} via ${source}...`);
+            try {
+                const res = await fetch('/api/realtime/start', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ symbol: symbol, data_source: source, webhook_url: webhook })
+                });
+                const data = await res.json();
+                if (data.status === 'started' || data.status === 'already_running') {
+                    log(`Real-Time: ${data.status}`);
+                } else {
+                    log(`Real-Time Error: ${data.error || data.status}`);
+                }
+                loadRealtimeStatus();
+            } catch (e) {
+                log('Start Error: ' + e.message);
+            }
+        }
+        async function stopRealtime() {
+            log('Stopping Real-Time System...');
+            try {
+                const res = await fetch('/api/realtime/stop', { method: 'POST' });
+                const data = await res.json();
+                log(`Real-Time: ${data.status}`);
+                loadRealtimeStatus();
+            } catch (e) {
+                log('Stop Error: ' + e.message);
+            }
+        }
         async function runSystemTest(type = 'full') {
             const statusEl = document.getElementById('testStatus');
             const reportEl = document.getElementById('testReport');
@@ -1206,7 +1287,15 @@
             const tqUser = document.getElementById('tqUser').value;
             const tqPass = document.getElementById('tqPass').value;
             
-            const days = prompt(`请输入导入天数 (默认 365 天):`, "365");
+            // Trae preview does not support prompt(), use custom logic or default
+            let days = "365";
+            if (typeof prompt === "function") {
+                try {
+                   days = prompt(`请输入导入天数 (默认 365 天):`, "365");
+                } catch(e) {
+                   console.warn("prompt() not supported, using default 365");
+                }
+            }
             if (days === null) return;
 
             log(`Starting Import for ${symbol} (${period})...`);

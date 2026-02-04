@@ -23,6 +23,7 @@ from strategy.chan_strategy import run_strategy
 from datafeed.base import parse_timestamp, PriceBar
 from pydantic import BaseModel
 from datetime import datetime
+from strategy.real_time import RealTimeTradingSystem
 
 # 自动创建表
 Base.metadata.create_all(bind=engine)
@@ -520,6 +521,83 @@ def run_system_diagnostics(type: str = "full"):
             "report": f"Failed to run tests: {str(e)}\n\nDebug Info:\n{debug_info}\n\nTraceback:\n{traceback.format_exc()}",
             "timestamp": datetime.now().isoformat()
         }
+
+class RealtimeStartRequest(BaseModel):
+    symbol: str
+    data_source: str = "tdx"
+    webhook_url: Optional[str] = None
+
+_RTS_INSTANCE: Optional[RealTimeTradingSystem] = None
+
+@app.get("/api/realtime/status")
+def realtime_status():
+    global _RTS_INSTANCE
+    if _RTS_INSTANCE and _RTS_INSTANCE.running:
+        return {
+            "running": True,
+            "symbol": _RTS_INSTANCE.symbol,
+            "period": _RTS_INSTANCE.period,
+            "data_source": _RTS_INSTANCE.data_source,
+            "update_interval": _RTS_INSTANCE.update_interval,
+            "last_signal_time": _RTS_INSTANCE.last_signal_time
+        }
+    return {"running": False}
+
+@app.post("/api/realtime/start")
+def realtime_start(req: RealtimeStartRequest):
+    global _RTS_INSTANCE
+    if _RTS_INSTANCE and _RTS_INSTANCE.running:
+        return {"status": "already_running"}
+    try:
+        _RTS_INSTANCE = RealTimeTradingSystem(
+            symbol=req.symbol,
+            webhook_url=req.webhook_url,
+            data_source=req.data_source
+        )
+        _RTS_INSTANCE.start(background=True)
+        return {"status": "started", "symbol": req.symbol, "data_source": req.data_source}
+    except Exception as e:
+        return {"status": "error", "error": str(e)}
+
+@app.post("/api/realtime/stop")
+def realtime_stop():
+    global _RTS_INSTANCE
+    if not _RTS_INSTANCE or not _RTS_INSTANCE.running:
+        return {"status": "not_running"}
+    try:
+        _RTS_INSTANCE.stop()
+        return {"status": "stopped"}
+    except Exception as e:
+        return {"status": "error", "error": str(e)}
+
+@app.on_event("startup")
+async def _auto_start_realtime():
+    try:
+        auto = os.getenv("REALTIME_AUTO_START", "false").lower() in ("1", "true", "yes", "y")
+        if not auto:
+            return
+        symbol = os.getenv("REALTIME_SYMBOL", "rb2505")
+        source = os.getenv("REALTIME_SOURCE", "tdx")
+        webhook = os.getenv("REALTIME_WEBHOOK", None)
+        global _RTS_INSTANCE
+        if not _RTS_INSTANCE or not _RTS_INSTANCE.running:
+            _RTS_INSTANCE = RealTimeTradingSystem(
+                symbol=symbol,
+                webhook_url=webhook,
+                data_source=source
+            )
+            _RTS_INSTANCE.start(background=True)
+    except Exception:
+        pass
+
+@app.on_event("shutdown")
+async def _auto_stop_realtime():
+    try:
+        global _RTS_INSTANCE
+        if _RTS_INSTANCE and _RTS_INSTANCE.running:
+            _RTS_INSTANCE.stop()
+    except Exception:
+        pass
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)

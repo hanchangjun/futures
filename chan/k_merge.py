@@ -26,6 +26,8 @@ def merge_klines(bars: List[PriceBar]) -> List[ChanBar]:
         date=first.date,
         high=first.high,
         low=first.low,
+        open=first.open,
+        close=first.close,
         elements=[0]
     )
     chan_bars.append(curr_chan)
@@ -60,6 +62,7 @@ def merge_klines(bars: List[PriceBar]) -> List[ChanBar]:
             prev.high = new_high
             prev.low = new_low
             prev.date = raw.date # 时间取最新的
+            prev.close = raw.close # 收盘价取最新的
             prev.index = i       # 索引更新
             prev.elements.append(i)
             
@@ -78,6 +81,8 @@ def merge_klines(bars: List[PriceBar]) -> List[ChanBar]:
                 date=raw.date,
                 high=raw.high,
                 low=raw.low,
+                open=raw.open,
+                close=raw.close,
                 elements=[i]
             )
             chan_bars.append(new_bar)
