@@ -234,6 +234,54 @@ def analyze_symbol(symbol: str, period: str, limit: int = 1000, strategy_name: s
             strat = PureChanStrategy(symbol, period)
             signals = strat.run(bars)
 
+        elif strategy_name == "rebar":
+            from strategy.rebar_strategy import RebarOptimizedChanSystem
+            
+            strat = RebarOptimizedChanSystem()
+            strat.analyze(bars)
+            
+            # Get results directly from strategy instance
+            bis = strat.笔列表
+            centers = strat.中枢列表
+            raw_signals = strat.买卖点记录
+            
+            # Serialize immediately for Rebar Strategy (different object structure)
+            res_bis = []
+            for b in bis:
+                res_bis.append({
+                    "start_dt": b.start_time.isoformat() if hasattr(b.start_time, 'isoformat') else str(b.start_time),
+                    "start_price": b.start_price,
+                    "end_dt": b.end_time.isoformat() if hasattr(b.end_time, 'isoformat') else str(b.end_time),
+                    "end_price": b.end_price,
+                    "direction": "Trend.UP" if b.direction == 'up' else "Trend.DOWN"
+                })
+                
+            res_centers = []
+            for c in centers:
+                res_centers.append({
+                    "zg": c.ZG,
+                    "zd": c.ZD,
+                    "start_dt": c.start_time.isoformat() if hasattr(c.start_time, 'isoformat') else str(c.start_time),
+                    "end_dt": c.end_time.isoformat() if hasattr(c.end_time, 'isoformat') else str(c.end_time)
+                })
+                
+            res_signals = []
+            for s in raw_signals:
+                res_signals.append({
+                    "type": s.type,
+                    "price": s.price,
+                    "dt": s.time.isoformat() if hasattr(s.time, 'isoformat') else str(s.time),
+                    "desc": f"Score: {s.score:.1f} {s.extra_info}",
+                    "score": s.score
+                })
+                
+            return {
+                "centers": res_centers,
+                "bi_list": res_bis,
+                "bis_count": len(bis),
+                "strategy": strategy_name,
+                "signals": res_signals
+            }
             
         else:
             # Standard Strategy
